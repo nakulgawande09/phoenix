@@ -1,5 +1,5 @@
 /**
- * @generated SignedSource<<ce1cc9af8e4d562eb6b58aebf9ebbf50>>
+ * @generated SignedSource<<ed03fa2b672f69342e67df7e05abd1c2>>
  * @lightSyntaxTransform
  * @nogrep
  */
@@ -14,9 +14,10 @@ export type OptimizationDirection = "MAXIMIZE" | "MINIMIZE" | "NONE";
 import { FragmentRefs } from "relay-runtime";
 export type BuiltInDatasetEvaluatorDetails_datasetEvaluator$data = {
   readonly evaluator: {
+    readonly isBuiltin: boolean;
     readonly kind: EvaluatorKind;
     readonly name: string;
-    readonly outputConfig?: {
+    readonly outputConfigs?: ReadonlyArray<{
       readonly lowerBound?: number | null;
       readonly name?: string;
       readonly optimizationDirection?: OptimizationDirection;
@@ -25,14 +26,14 @@ export type BuiltInDatasetEvaluatorDetails_datasetEvaluator$data = {
         readonly label: string;
         readonly score: number | null;
       }>;
-    };
+    }>;
   };
   readonly id: string;
   readonly inputMapping: {
     readonly literalMapping: any;
     readonly pathMapping: any;
   };
-  readonly outputConfig: {
+  readonly outputConfigs: ReadonlyArray<{
     readonly lowerBound?: number | null;
     readonly name?: string;
     readonly optimizationDirection?: OptimizationDirection;
@@ -41,7 +42,7 @@ export type BuiltInDatasetEvaluatorDetails_datasetEvaluator$data = {
       readonly label: string;
       readonly score: number | null;
     }>;
-  } | null;
+  }> | null;
   readonly " $fragmentType": "BuiltInDatasetEvaluatorDetails_datasetEvaluator";
 };
 export type BuiltInDatasetEvaluatorDetails_datasetEvaluator$key = {
@@ -69,8 +70,8 @@ v2 = {
   "args": null,
   "concreteType": null,
   "kind": "LinkedField",
-  "name": "outputConfig",
-  "plural": false,
+  "name": "outputConfigs",
+  "plural": true,
   "selections": [
     {
       "kind": "InlineFragment",
@@ -194,6 +195,13 @@ return {
         },
         (v0/*: any*/),
         {
+          "alias": null,
+          "args": null,
+          "kind": "ScalarField",
+          "name": "isBuiltin",
+          "storageKey": null
+        },
+        {
           "kind": "InlineFragment",
           "selections": [
             (v2/*: any*/)
@@ -210,6 +218,6 @@ return {
 };
 })();
 
-(node as any).hash = "3a9e4de0e1fb32eba1806f64f1714f27";
+(node as any).hash = "57da5f2fd7c96c20dbfff137b122054f";
 
 export default node;
