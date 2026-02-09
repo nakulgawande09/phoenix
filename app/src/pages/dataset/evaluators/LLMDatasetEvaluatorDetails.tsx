@@ -55,7 +55,7 @@ export function LLMDatasetEvaluatorDetails({
           }
         }
         outputConfigs {
-          ... on CategoricalAnnotationConfig {
+          ... on EmbeddedCategoricalAnnotationConfig {
             name
             optimizationDirection
             values {
@@ -63,7 +63,7 @@ export function LLMDatasetEvaluatorDetails({
               score
             }
           }
-          ... on ContinuousAnnotationConfig {
+          ... on EmbeddedContinuousAnnotationConfig {
             name
             optimizationDirection
             lowerBound
@@ -138,9 +138,7 @@ export function LLMDatasetEvaluatorDetails({
                         </Text>
                         {outputConfig.optimizationDirection && (
                           <Text size="S">
-                            <Text weight="heavy">
-                              Optimization Direction:
-                            </Text>{" "}
+                            <Text weight="heavy">Optimization Direction:</Text>{" "}
                             {outputConfig.optimizationDirection}
                           </Text>
                         )}
