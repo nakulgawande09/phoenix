@@ -207,7 +207,7 @@ class TestChatCompletionSubscription:
 
         # check attributes
         assert span.pop("id") == span_id
-        assert span.pop("name") == "Chat Completion"
+        assert span.pop("name") == "ChatCompletion"
         assert span.pop("statusCode") == "OK"
         assert not span.pop("statusMessage")
         assert span.pop("startTime")
@@ -342,7 +342,7 @@ class TestChatCompletionSubscription:
 
         # check attributes
         assert span.pop("id") == span_id
-        assert span.pop("name") == "Chat Completion"
+        assert span.pop("name") == "ChatCompletion"
         assert span.pop("statusCode") == "ERROR"
         assert span.pop("statusMessage") == status_message
         assert span.pop("startTime")
@@ -483,7 +483,7 @@ class TestChatCompletionSubscription:
 
         # check attributes
         assert span.pop("id") == span_id
-        assert span.pop("name") == "Chat Completion"
+        assert span.pop("name") == "ChatCompletion"
         assert span.pop("statusCode") == "OK"
         assert not span.pop("statusMessage")
         assert span.pop("startTime")
@@ -639,7 +639,7 @@ class TestChatCompletionSubscription:
 
         # check attributes
         assert span.pop("id") == span_id
-        assert span.pop("name") == "Chat Completion"
+        assert span.pop("name") == "ChatCompletion"
         assert span.pop("statusCode") == "OK"
         assert not span.pop("statusMessage")
         assert span.pop("startTime")
@@ -799,7 +799,7 @@ class TestChatCompletionSubscription:
 
         # check attributes
         assert span.pop("id") == span_id
-        assert span.pop("name") == "Chat Completion"
+        assert span.pop("name") == "ChatCompletion"
         assert span.pop("statusCode") == "OK"
         assert not span.pop("statusMessage")
         assert span.pop("startTime")
@@ -1121,7 +1121,7 @@ class TestChatCompletionOverDatasetSubscription:
 
         # check example 1 span attributes
         assert span.pop("id") == span_id
-        assert span.pop("name") == "Chat Completion"
+        assert span.pop("name") == "ChatCompletion"
         assert span.pop("statusCode") == "OK"
         assert not span.pop("statusMessage")
         assert span.pop("startTime")
@@ -1209,7 +1209,7 @@ class TestChatCompletionOverDatasetSubscription:
 
         # check example 2 span attributes
         assert span.pop("id") == span_id
-        assert span.pop("name") == "Chat Completion"
+        assert span.pop("name") == "ChatCompletion"
         assert span.pop("statusCode") == "OK"
         assert not span.pop("statusMessage")
         assert span.pop("startTime")

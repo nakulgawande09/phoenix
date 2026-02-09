@@ -431,7 +431,7 @@ class OpenAIBaseStreamingClient(PlaygroundStreamingClient["AsyncOpenAI"]):
 
         async with self._client_factory() as client:
             with tracer_.start_as_current_span(
-                "Chat Completion",
+                "ChatCompletion",
                 attributes=attributes,
                 set_status_on_exception=False,  # manually set exception to control message
             ) as span:
