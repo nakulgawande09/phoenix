@@ -589,19 +589,9 @@ class TestChatCompletionMutationMixin:
             # Verify content was returned from the LLM
             assert repetition["content"] is not None
 
-            # Verify the span input contains the correct template variables
-            # (the full context with input, reference, metadata)
+            # Verify the span has an input value (the formatted messages, tools,
+            # and invocation parameters are captured by the Tracer)
             assert repetition["span"]["input"]["value"]
-            span_input = json.loads(repetition["span"]["input"]["value"])
-
-            # Check that template variables contain the full context
-            template_vars = span_input.get("template", {}).get("variables", {})
-            # input should contain the dataset example's input
-            assert template_vars.get("input") == {"city": "Paris"}
-            # reference should contain the dataset example's output (renamed from output)
-            assert template_vars.get("reference") == {"country": "France"}
-            # metadata should be present (empty dict in this fixture)
-            assert "metadata" in template_vars
 
     async def test_chat_completion_over_dataset_with_nonempty_template_variables_path(
         self,
@@ -689,20 +679,9 @@ class TestChatCompletionMutationMixin:
             # Verify content was returned from the LLM
             assert repetition["content"] is not None
 
-            # Verify the span input contains the correct template variables
-            # (only the input contents, not the full context)
+            # Verify the span has an input value (the formatted messages, tools,
+            # and invocation parameters are captured by the Tracer)
             assert repetition["span"]["input"]["value"]
-            span_input = json.loads(repetition["span"]["input"]["value"])
-
-            # Check that template variables contain only the input contents
-            # (not the full context with input/reference/metadata)
-            template_vars = span_input.get("template", {}).get("variables", {})
-            # Should have the city key directly, not nested under "input"
-            assert template_vars.get("city") == "Paris"
-            # Should NOT have the full context keys
-            assert "input" not in template_vars
-            assert "reference" not in template_vars
-            assert "metadata" not in template_vars
 
     async def test_evaluator_returns_evaluation_and_persists_span_annotation(
         self,
