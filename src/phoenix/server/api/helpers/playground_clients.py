@@ -433,63 +433,77 @@ class OpenAIBaseStreamingClient(PlaygroundStreamingClient["AsyncOpenAI"]):
             with tracer_.start_as_current_span(
                 "Chat Completion",
                 attributes=attributes,
+                set_status_on_exception=False,  # manually set exception to control message
             ) as span:
-                # Wrap httpx client for instrumentation (fresh client each request)
-                client._client = _HttpxClient(client._client, self._attributes, span=span)
-                throttled_create = self.rate_limiter._alimit(client.chat.completions.create)
-                stream = cast(
-                    AsyncIterable[chat.ChatCompletionChunk],
-                    await throttled_create(
-                        messages=openai_messages,
-                        model=self.model_name,
-                        stream=True,
-                        stream_options=chat.ChatCompletionStreamOptionsParam(include_usage=True),
-                        tools=tools or omit,
-                        **invocation_parameters,
-                    ),
-                )
-                async for chunk in stream:
-                    if (usage := chunk.usage) is not None:
-                        token_usage = usage
-                    if not chunk.choices:
-                        # for Azure, initial chunk contains the content filter
-                        continue
-                    choice = chunk.choices[0]
-                    delta = choice.delta
-                    if choice.finish_reason is None:
-                        if isinstance(chunk_content := delta.content, str):
-                            text_chunk = TextChunk(content=chunk_content)
-                            text_chunks.append(text_chunk)
-                            yield text_chunk
-                        if (tool_calls := delta.tool_calls) is not None:
-                            for tool_call_index, tool_call in enumerate(tool_calls):
-                                tool_call_id = (
-                                    tool_call.id
-                                    if tool_call.id is not None
-                                    else tool_call_ids[tool_call_index]
-                                )
-                                tool_call_ids[tool_call_index] = tool_call_id
-                                if (function := tool_call.function) is not None:
-                                    tool_call_chunk = ToolCallChunk(
-                                        id=tool_call_id,
-                                        function=FunctionCallChunk(
-                                            name=function.name or "",
-                                            arguments=function.arguments or "",
-                                        ),
+                try:
+                    # Wrap httpx client for instrumentation (fresh client each request)
+                    client._client = _HttpxClient(client._client, self._attributes, span=span)
+                    throttled_create = self.rate_limiter._alimit(client.chat.completions.create)
+                    stream = cast(
+                        AsyncIterable[chat.ChatCompletionChunk],
+                        await throttled_create(
+                            messages=openai_messages,
+                            model=self.model_name,
+                            stream=True,
+                            stream_options=chat.ChatCompletionStreamOptionsParam(
+                                include_usage=True
+                            ),
+                            tools=tools or omit,
+                            **invocation_parameters,
+                        ),
+                    )
+                    async for chunk in stream:
+                        if (usage := chunk.usage) is not None:
+                            token_usage = usage
+                        if not chunk.choices:
+                            # for Azure, initial chunk contains the content filter
+                            continue
+                        choice = chunk.choices[0]
+                        delta = choice.delta
+                        if choice.finish_reason is None:
+                            if isinstance(chunk_content := delta.content, str):
+                                text_chunk = TextChunk(content=chunk_content)
+                                text_chunks.append(text_chunk)
+                                yield text_chunk
+                            if (tool_calls := delta.tool_calls) is not None:
+                                for tool_call_index, tool_call in enumerate(tool_calls):
+                                    tool_call_id = (
+                                        tool_call.id
+                                        if tool_call.id is not None
+                                        else tool_call_ids[tool_call_index]
                                     )
-                                    tool_call_chunks[tool_call_id].append(tool_call_chunk)
-                                    yield tool_call_chunk
+                                    tool_call_ids[tool_call_index] = tool_call_id
+                                    if (function := tool_call.function) is not None:
+                                        tool_call_chunk = ToolCallChunk(
+                                            id=tool_call_id,
+                                            function=FunctionCallChunk(
+                                                name=function.name or "",
+                                                arguments=function.arguments or "",
+                                            ),
+                                        )
+                                        tool_call_chunks[tool_call_id].append(tool_call_chunk)
+                                        yield tool_call_chunk
 
-                span.set_status(Status(StatusCode.OK))
-                if token_usage is not None:
-                    llm_token_count_attributes = dict(self._llm_token_counts(token_usage))
-                    self._attributes.update(llm_token_count_attributes)
-                    span.set_attributes(llm_token_count_attributes)
+                    span.set_status(Status(StatusCode.OK))
+                    if token_usage is not None:
+                        llm_token_count_attributes = dict(self._llm_token_counts(token_usage))
+                        self._attributes.update(llm_token_count_attributes)
+                        span.set_attributes(llm_token_count_attributes)
 
-                if text_chunks or tool_call_chunks:
-                    span.set_attributes(dict(_llm_output_messages(text_chunks, tool_call_chunks)))
-                    if output_attrs := _output_attributes(text_chunks, tool_call_chunks):
-                        span.set_attributes(output_attrs)
+                    if text_chunks or tool_call_chunks:
+                        span.set_attributes(
+                            dict(_llm_output_messages(text_chunks, tool_call_chunks))
+                        )
+                        if output_attrs := _output_attributes(text_chunks, tool_call_chunks):
+                            span.set_attributes(output_attrs)
+                except Exception as e:
+                    span.set_status(
+                        Status(
+                            StatusCode.ERROR,
+                            str(e),  # exception message does not include exception type prefix
+                        )
+                    )
+                    raise
 
     def to_openai_chat_completion_param(
         self,

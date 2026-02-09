@@ -229,8 +229,8 @@ class TestChatCompletionSubscription:
         assert (input := span.pop("input")).pop("mimeType") == "json"
         assert (input_value := input.pop("value"))
         assert not input
-        assert "api_key" not in str(input_value)
-        assert "apiKey" not in str(input_value)
+        assert "api_key" not in input_value
+        assert "apiKey" not in input_value
         assert (output := span.pop("output")).pop("mimeType") == "text"
         assert output.pop("value")
         assert not output
@@ -344,10 +344,7 @@ class TestChatCompletionSubscription:
         assert span.pop("id") == span_id
         assert span.pop("name") == "Chat Completion"
         assert span.pop("statusCode") == "ERROR"
-        # Status message may have exception type prefix
-        span_status_message = span.pop("statusMessage")
-        assert "401" in span_status_message
-        assert "invalid_api_key" in span_status_message
+        assert span.pop("statusMessage") == status_message
         assert span.pop("startTime")
         assert span.pop("endTime")
         assert isinstance(span.pop("latencyMs"), float)
@@ -371,10 +368,7 @@ class TestChatCompletionSubscription:
         assert len(events) == 1
         assert (event := events[0])
         assert event.pop("name") == "exception"
-        # Status message may have exception type prefix
-        event_message = event.pop("message")
-        assert "401" in event_message
-        assert "invalid_api_key" in event_message
+        assert event.pop("message") == status_message
         assert datetime.fromisoformat(event.pop("timestamp"))
         assert not event
         assert isinstance(
@@ -1237,8 +1231,8 @@ class TestChatCompletionOverDatasetSubscription:
         assert (input := span.pop("input")).pop("mimeType") == "json"
         assert (input_value := input.pop("value"))
         assert not input
-        assert "api_key" not in str(input_value)
-        assert "apiKey" not in str(input_value)
+        assert "api_key" not in input_value
+        assert "apiKey" not in input_value
         assert (output := span.pop("output")).pop("mimeType") == "text"
         assert output.pop("value")
         assert not output
