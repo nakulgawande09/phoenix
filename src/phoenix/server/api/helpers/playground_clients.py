@@ -248,7 +248,6 @@ class PlaygroundStreamingClient(ABC, Generic[ClientT]):
     @abstractmethod
     def supported_invocation_parameters(cls) -> list[InvocationParameter]: ...
 
-    @abstractmethod
     async def chat_completion_create(
         self,
         messages: list[PlaygroundMessage],
@@ -256,9 +255,66 @@ class PlaygroundStreamingClient(ABC, Generic[ClientT]):
         tracer: Tracer | None = None,
         **invocation_parameters: Any,
     ) -> AsyncIterator[ChatCompletionChunk]:
-        # a yield statement is needed to satisfy the type-checker
-        # https://mypy.readthedocs.io/en/stable/more_types.html#asynchronous-iterators
-        yield TextChunk(content="")
+        tracer_ = tracer or NoOpTracer()
+        attributes = dict(
+            chain(
+                llm_span_kind(),
+                llm_model_name(self.model_name),
+                self._attributes.items(),
+                llm_tools(tools),
+                llm_input_messages(messages),
+                llm_invocation_parameters(invocation_parameters),
+                get_input_attributes(
+                    jsonify(
+                        {
+                            "messages": messages,
+                            "tools": tools,
+                            "invocation_parameters": _filter_invocation_parameters(
+                                invocation_parameters
+                            ),
+                        }
+                    )
+                ).items(),
+            )
+        )
+
+        with tracer_.start_as_current_span(
+            "ChatCompletion",
+            attributes=attributes,
+            set_status_on_exception=False,  # manually set exception to control message
+        ) as span:
+            text_chunks: list[TextChunk] = []
+            tool_call_chunks: defaultdict[ToolCallID, list[ToolCallChunk]] = defaultdict(list)
+            try:
+                async for chunk in self._chat_completion_create(
+                    messages=messages, tools=tools, span=span, **invocation_parameters
+                ):
+                    if isinstance(chunk, TextChunk):
+                        text_chunks.append(chunk)
+                        yield chunk
+                    elif isinstance(chunk, ToolCallChunk):
+                        tool_call_chunks[chunk.id].append(chunk)
+                        yield chunk
+
+                span.set_status(Status(StatusCode.OK))
+                if text_chunks or tool_call_chunks:
+                    span.set_attributes(dict(_llm_output_messages(text_chunks, tool_call_chunks)))
+                    if output_attrs := _output_attributes(text_chunks, tool_call_chunks):
+                        span.set_attributes(output_attrs)
+            except Exception as e:
+                span.set_status(Status(StatusCode.ERROR, str(e)))
+                raise
+
+    @abstractmethod
+    async def _chat_completion_create(
+        self,
+        *,
+        messages: list[PlaygroundMessage],
+        tools: list[JSONScalarType],
+        span: OTelSpan,
+        **invocation_parameters: Any,
+    ) -> AsyncIterator[ChatCompletionChunk]:
+        pass
 
     @classmethod
     def construct_invocation_parameters(
@@ -385,38 +441,17 @@ class OpenAIBaseStreamingClient(PlaygroundStreamingClient["AsyncOpenAI"]):
             ),
         ]
 
-    async def chat_completion_create(
+    async def _chat_completion_create(
         self,
+        *,
         messages: list[PlaygroundMessage],
         tools: list[JSONScalarType],
-        tracer: Tracer | None = None,
+        span: OTelSpan,
         **invocation_parameters: Any,
     ) -> AsyncIterator[ChatCompletionChunk]:
         from openai import omit
         from openai.types import chat
 
-        tracer_ = tracer or NoOpTracer()
-        attributes = dict(
-            chain(
-                llm_span_kind(),
-                llm_model_name(self.model_name),
-                self._attributes.items(),
-                llm_tools(tools),
-                llm_input_messages(messages),
-                llm_invocation_parameters(invocation_parameters),
-                get_input_attributes(
-                    jsonify(
-                        {
-                            "messages": messages,
-                            "tools": tools,
-                            "invocation_parameters": _filter_invocation_parameters(
-                                invocation_parameters
-                            ),
-                        }
-                    )
-                ).items(),
-            )
-        )
         # Convert standard messages to OpenAI messages
         openai_messages = []
         for message in messages:
@@ -426,84 +461,53 @@ class OpenAIBaseStreamingClient(PlaygroundStreamingClient["AsyncOpenAI"]):
         tool_call_ids: dict[int, str] = {}
         token_usage: Optional["CompletionUsage"] = None
 
-        text_chunks: list[TextChunk] = []
-        tool_call_chunks: defaultdict[ToolCallID, list[ToolCallChunk]] = defaultdict(list)
-
         async with self._client_factory() as client:
-            with tracer_.start_as_current_span(
-                "ChatCompletion",
-                attributes=attributes,
-                set_status_on_exception=False,  # manually set exception to control message
-            ) as span:
-                try:
-                    # Wrap httpx client for instrumentation (fresh client each request)
-                    client._client = _HttpxClient(client._client, self._attributes, span=span)
-                    throttled_create = self.rate_limiter._alimit(client.chat.completions.create)
-                    stream = cast(
-                        AsyncIterable[chat.ChatCompletionChunk],
-                        await throttled_create(
-                            messages=openai_messages,
-                            model=self.model_name,
-                            stream=True,
-                            stream_options=chat.ChatCompletionStreamOptionsParam(
-                                include_usage=True
-                            ),
-                            tools=tools or omit,
-                            **invocation_parameters,
-                        ),
-                    )
-                    async for chunk in stream:
-                        if (usage := chunk.usage) is not None:
-                            token_usage = usage
-                        if not chunk.choices:
-                            # for Azure, initial chunk contains the content filter
-                            continue
-                        choice = chunk.choices[0]
-                        delta = choice.delta
-                        if choice.finish_reason is None:
-                            if isinstance(chunk_content := delta.content, str):
-                                text_chunk = TextChunk(content=chunk_content)
-                                text_chunks.append(text_chunk)
-                                yield text_chunk
-                            if (tool_calls := delta.tool_calls) is not None:
-                                for tool_call_index, tool_call in enumerate(tool_calls):
-                                    tool_call_id = (
-                                        tool_call.id
-                                        if tool_call.id is not None
-                                        else tool_call_ids[tool_call_index]
-                                    )
-                                    tool_call_ids[tool_call_index] = tool_call_id
-                                    if (function := tool_call.function) is not None:
-                                        tool_call_chunk = ToolCallChunk(
-                                            id=tool_call_id,
-                                            function=FunctionCallChunk(
-                                                name=function.name or "",
-                                                arguments=function.arguments or "",
-                                            ),
-                                        )
-                                        tool_call_chunks[tool_call_id].append(tool_call_chunk)
-                                        yield tool_call_chunk
+            # Wrap httpx client for instrumentation (fresh client each request)
+            client._client = _HttpxClient(client._client, self._attributes, span=span)
+            throttled_create = self.rate_limiter._alimit(client.chat.completions.create)
+            stream = cast(
+                AsyncIterable[chat.ChatCompletionChunk],
+                await throttled_create(
+                    messages=openai_messages,
+                    model=self.model_name,
+                    stream=True,
+                    stream_options=chat.ChatCompletionStreamOptionsParam(include_usage=True),
+                    tools=tools or omit,
+                    **invocation_parameters,
+                ),
+            )
+            async for chunk in stream:
+                if (usage := chunk.usage) is not None:
+                    token_usage = usage
+                if not chunk.choices:
+                    # for Azure, initial chunk contains the content filter
+                    continue
+                choice = chunk.choices[0]
+                delta = choice.delta
+                if choice.finish_reason is None:
+                    if isinstance(chunk_content := delta.content, str):
+                        yield TextChunk(content=chunk_content)
+                    if (tool_calls := delta.tool_calls) is not None:
+                        for tool_call_index, tool_call in enumerate(tool_calls):
+                            tool_call_id = (
+                                tool_call.id
+                                if tool_call.id is not None
+                                else tool_call_ids[tool_call_index]
+                            )
+                            tool_call_ids[tool_call_index] = tool_call_id
+                            if (function := tool_call.function) is not None:
+                                yield ToolCallChunk(
+                                    id=tool_call_id,
+                                    function=FunctionCallChunk(
+                                        name=function.name or "",
+                                        arguments=function.arguments or "",
+                                    ),
+                                )
 
-                    span.set_status(Status(StatusCode.OK))
-                    if token_usage is not None:
-                        llm_token_count_attributes = dict(self._llm_token_counts(token_usage))
-                        self._attributes.update(llm_token_count_attributes)
-                        span.set_attributes(llm_token_count_attributes)
-
-                    if text_chunks or tool_call_chunks:
-                        span.set_attributes(
-                            dict(_llm_output_messages(text_chunks, tool_call_chunks))
-                        )
-                        if output_attrs := _output_attributes(text_chunks, tool_call_chunks):
-                            span.set_attributes(output_attrs)
-                except Exception as e:
-                    span.set_status(
-                        Status(
-                            StatusCode.ERROR,
-                            str(e),  # exception message does not include exception type prefix
-                        )
-                    )
-                    raise
+            if token_usage is not None:
+                llm_token_count_attributes = dict(self._llm_token_counts(token_usage))
+                self._attributes.update(llm_token_count_attributes)
+                span.set_attributes(llm_token_count_attributes)
 
     def to_openai_chat_completion_param(
         self,
@@ -747,20 +751,28 @@ class BedrockStreamingClient(PlaygroundStreamingClient["BedrockRuntimeClient"]):
             ),
         ]
 
-    async def chat_completion_create(
+    async def _chat_completion_create(
         self,
+        *,
         messages: list[PlaygroundMessage],
         tools: list[JSONScalarType],
-        tracer: Tracer | None = None,
+        span: OTelSpan,
         **invocation_parameters: Any,
     ) -> AsyncIterator[ChatCompletionChunk]:
-        async for chunk in self._handle_converse_api(messages, tools, invocation_parameters):
+        async for chunk in self._handle_converse_api(
+            messages=messages,
+            tools=tools,
+            span=span,
+            invocation_parameters=invocation_parameters,
+        ):
             yield chunk
 
     async def _handle_converse_api(
         self,
+        *,
         messages: list[PlaygroundMessage],
         tools: list[JSONScalarType],
+        span: OTelSpan,
         invocation_parameters: dict[str, Any],
     ) -> AsyncIterator[ChatCompletionChunk]:
         """
@@ -889,23 +901,26 @@ class BedrockStreamingClient(PlaygroundStreamingClient["BedrockRuntimeClient"]):
                         {
                             LLM_TOKEN_COUNT_PROMPT: event.get("metadata")
                             .get("usage", {})
-                            .get("inputTokens", 0)
-                        }
-                    )
-
-                    self._attributes.update(
-                        {
+                            .get("inputTokens", 0),
                             LLM_TOKEN_COUNT_COMPLETION: event.get("metadata")
                             .get("usage", {})
-                            .get("outputTokens", 0)
-                        }
-                    )
-
-                    self._attributes.update(
-                        {
+                            .get("outputTokens", 0),
                             LLM_TOKEN_COUNT_TOTAL: event.get("metadata")
                             .get("usage", {})
-                            .get("totalTokens", 0)
+                            .get("totalTokens", 0),
+                        }
+                    )
+                    span.set_attributes(
+                        {
+                            LLM_TOKEN_COUNT_PROMPT: event.get("metadata")
+                            .get("usage", {})
+                            .get("inputTokens", 0),
+                            LLM_TOKEN_COUNT_COMPLETION: event.get("metadata")
+                            .get("usage", {})
+                            .get("outputTokens", 0),
+                            LLM_TOKEN_COUNT_TOTAL: event.get("metadata")
+                            .get("usage", {})
+                            .get("totalTokens", 0),
                         }
                     )
 
@@ -1305,11 +1320,12 @@ class AzureOpenAIReasoningNonStreamingClient(
     AzureOpenAIStreamingClient,
 ):
     @override
-    async def chat_completion_create(
+    async def _chat_completion_create(
         self,
+        *,
         messages: list[PlaygroundMessage],
         tools: list[JSONScalarType],
-        tracer: Tracer | None = None,
+        span: OTelSpan,
         **invocation_parameters: Any,
     ) -> AsyncIterator[ChatCompletionChunk]:
         from openai import omit
@@ -1324,7 +1340,7 @@ class AzureOpenAIReasoningNonStreamingClient(
 
         async with self._client_factory() as client:
             # Wrap httpx client for instrumentation (fresh client each request)
-            client._client = _HttpxClient(client._client, self._attributes)
+            client._client = _HttpxClient(client._client, self._attributes, span=span)
             throttled_create = self.rate_limiter._alimit(client.chat.completions.create)
             response = cast(
                 chat.ChatCompletion,
@@ -1339,6 +1355,7 @@ class AzureOpenAIReasoningNonStreamingClient(
 
         if response.usage is not None:
             self._attributes.update(dict(self._llm_token_counts(response.usage)))
+            span.set_attributes(dict(self._llm_token_counts(response.usage)))
 
         choice = response.choices[0]
         if choice.message.content:
@@ -1481,11 +1498,12 @@ class AnthropicStreamingClient(PlaygroundStreamingClient["AsyncAnthropic"]):
             ),
         ]
 
-    async def chat_completion_create(
+    async def _chat_completion_create(
         self,
+        *,
         messages: list[PlaygroundMessage],
         tools: list[JSONScalarType],
-        tracer: Tracer | None = None,
+        span: OTelSpan,
         **invocation_parameters: Any,
     ) -> AsyncIterator[ChatCompletionChunk]:
         import anthropic.lib.streaming as anthropic_streaming
@@ -1502,7 +1520,7 @@ class AnthropicStreamingClient(PlaygroundStreamingClient["AsyncAnthropic"]):
 
         async with self._client_factory() as client:
             # Wrap httpx client for instrumentation (fresh client each request)
-            client._client = _HttpxClient(client._client, self._attributes)
+            client._client = _HttpxClient(client._client, self._attributes, span=span)
             throttled_stream = self.rate_limiter._alimit(client.messages.stream)
             async with await throttled_stream(**anthropic_params) as stream:
                 async for event in stream:
@@ -1523,7 +1541,9 @@ class AnthropicStreamingClient(PlaygroundStreamingClient["AsyncAnthropic"]):
                                 token_counts[LLM_TOKEN_COUNT_PROMPT_DETAILS_CACHE_WRITE] = (
                                     cache_creation_tokens
                                 )
-                        self._attributes.update(token_counts)
+                        if token_counts:
+                            self._attributes.update(token_counts)
+                            span.set_attributes(token_counts)
                     elif isinstance(event, anthropic_streaming.TextEvent):
                         yield TextChunk(content=event.text)
                     elif isinstance(event, anthropic_streaming.MessageStopEvent):
@@ -1536,7 +1556,9 @@ class AnthropicStreamingClient(PlaygroundStreamingClient["AsyncAnthropic"]):
                                 output_token_counts[LLM_TOKEN_COUNT_PROMPT_DETAILS_CACHE_READ] = (
                                     cache_read_tokens
                                 )
-                        self._attributes.update(output_token_counts)
+                        if output_token_counts:
+                            self._attributes.update(output_token_counts)
+                            span.set_attributes(output_token_counts)
                     elif (
                         isinstance(event, anthropic_streaming.ContentBlockStopEvent)
                         and event.content_block.type == "tool_use"
@@ -1736,11 +1758,12 @@ class GoogleStreamingClient(PlaygroundStreamingClient["GoogleAsyncClient"]):
             ),
         ]
 
-    async def chat_completion_create(
+    async def _chat_completion_create(
         self,
+        *,
         messages: list[PlaygroundMessage],
         tools: list[JSONScalarType],
-        tracer: Tracer | None = None,
+        span: OTelSpan,
         **invocation_parameters: Any,
     ) -> AsyncIterator[ChatCompletionChunk]:
         from google.genai import types
@@ -1768,6 +1791,13 @@ class GoogleStreamingClient(PlaygroundStreamingClient["GoogleAsyncClient"]):
                 # Update token counts if usage_metadata is present
                 if event.usage_metadata:
                     self._attributes.update(
+                        {
+                            LLM_TOKEN_COUNT_PROMPT: event.usage_metadata.prompt_token_count,
+                            LLM_TOKEN_COUNT_COMPLETION: event.usage_metadata.candidates_token_count,
+                            LLM_TOKEN_COUNT_TOTAL: event.usage_metadata.total_token_count,
+                        }
+                    )
+                    span.set_attribute(
                         {
                             LLM_TOKEN_COUNT_PROMPT: event.usage_metadata.prompt_token_count,
                             LLM_TOKEN_COUNT_COMPLETION: event.usage_metadata.candidates_token_count,

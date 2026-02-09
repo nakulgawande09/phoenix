@@ -85,7 +85,7 @@ class TestOpenAIBaseStreamingClient:
         assert len(spans) == 1
         span: ReadableSpan = spans[0]
 
-        assert span.name == "Chat Completion"
+        assert span.name == "ChatCompletion"
         assert span.status.is_ok
         assert not span.events
 
@@ -210,7 +210,7 @@ class TestOpenAIBaseStreamingClient:
         assert len(spans) == 1
         span: ReadableSpan = spans[0]
 
-        assert span.name == "Chat Completion"
+        assert span.name == "ChatCompletion"
         assert span.status.is_ok
         assert not span.events
 
