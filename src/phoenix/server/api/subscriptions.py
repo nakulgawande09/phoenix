@@ -55,7 +55,7 @@ from phoenix.server.api.helpers.playground_clients import (
     get_playground_client,
     initialize_playground_clients,
 )
-from phoenix.server.api.helpers.playground_spans import (
+from phoenix.server.api.helpers.playground_experiment_runs import (
     get_db_experiment_run,
 )
 from phoenix.server.api.helpers.playground_users import get_user
