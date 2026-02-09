@@ -1546,7 +1546,7 @@ class AnthropicStreamingClient(PlaygroundStreamingClient["AsyncAnthropic"]):
                             span.set_attributes(token_counts)
                     elif isinstance(event, anthropic_streaming.TextEvent):
                         yield TextChunk(content=event.text)
-                    elif isinstance(event, anthropic_streaming.MessageStopEvent):
+                    elif isinstance(event, anthropic_streaming.ParsedMessageStopEvent):
                         usage = event.message.usage
                         output_token_counts: dict[str, Any] = {}
                         if usage.output_tokens:
@@ -1560,7 +1560,7 @@ class AnthropicStreamingClient(PlaygroundStreamingClient["AsyncAnthropic"]):
                             self._attributes.update(output_token_counts)
                             span.set_attributes(output_token_counts)
                     elif (
-                        isinstance(event, anthropic_streaming.ContentBlockStopEvent)
+                        isinstance(event, anthropic_streaming.ParsedContentBlockStopEvent)
                         and event.content_block.type == "tool_use"
                     ):
                         tool_call_chunk = ToolCallChunk(
@@ -1577,14 +1577,12 @@ class AnthropicStreamingClient(PlaygroundStreamingClient["AsyncAnthropic"]):
                             anthropic_types.RawContentBlockStartEvent,
                             anthropic_types.RawContentBlockDeltaEvent,
                             anthropic_types.RawMessageDeltaEvent,
-                            anthropic_streaming.ContentBlockStopEvent,
+                            anthropic_streaming.ParsedContentBlockStopEvent,
                             anthropic_streaming.InputJsonEvent,
                         ),
                     ):
                         # event types emitted by the stream that don't contain useful information
                         pass
-                    elif isinstance(event, anthropic_streaming.InputJsonEvent):
-                        raise NotImplementedError
                     elif isinstance(event, anthropic_streaming._types.CitationEvent):
                         raise NotImplementedError
                     elif isinstance(event, anthropic_streaming._types.ThinkingEvent):

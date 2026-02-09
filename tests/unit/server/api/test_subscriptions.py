@@ -3,7 +3,6 @@ import re
 from datetime import datetime
 from typing import Any, Awaitable, Callable, Mapping, Optional
 
-import pytest
 from openinference.semconv.trace import (
     MessageAttributes,
     OpenInferenceMimeTypeValues,
@@ -734,10 +733,6 @@ class TestChatCompletionSubscription:
         assert attributes.pop(URL_PATH) == "chat/completions"
         assert not attributes
 
-    # TODO: Investigate Anthropic streaming with new Tracer - no result payload being emitted
-    @pytest.mark.skip(
-        reason="Anthropic streaming needs investigation with new Tracer implementation"
-    )
     async def test_anthropic_text_response_emits_expected_payloads_and_records_expected_span(
         self,
         gql_client: AsyncGraphQLClient,
@@ -849,7 +844,10 @@ class TestChatCompletionSubscription:
         )
         assert attributes.pop(LLM_TOKEN_COUNT_PROMPT) == token_count_prompt
         assert attributes.pop(LLM_TOKEN_COUNT_COMPLETION) == token_count_completion
-        # Input/output values are no longer set by the new Tracer implementation
+        assert attributes.pop(INPUT_VALUE)
+        assert attributes.pop(INPUT_MIME_TYPE) == JSON
+        assert attributes.pop(OUTPUT_VALUE)
+        assert attributes.pop(OUTPUT_MIME_TYPE) == TEXT
         assert attributes.pop(LLM_INPUT_MESSAGES) == [
             {
                 "message": {

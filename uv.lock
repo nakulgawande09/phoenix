@@ -472,7 +472,7 @@ requires-dist = [
     { name = "aioitertools" },
     { name = "aiosqlite" },
     { name = "alembic", specifier = ">=1.3.0,<2" },
-    { name = "anthropic", marker = "extra == 'container'", specifier = ">=0.49.0" },
+    { name = "anthropic", marker = "extra == 'container'", specifier = ">=0.78.0" },
     { name = "arize-phoenix-client", editable = "packages/phoenix-client" },
     { name = "arize-phoenix-evals", editable = "packages/phoenix-evals" },
     { name = "arize-phoenix-otel", editable = "packages/phoenix-otel" },
@@ -546,7 +546,7 @@ provides-extras = ["aws", "container", "embeddings", "evals", "experimental", "p
 dev = [
     { name = "aiobotocore", specifier = ">=3.1.1" },
     { name = "aiosqlite", specifier = "<0.22.0" },
-    { name = "anthropic" },
+    { name = "anthropic", specifier = ">=0.78.0" },
     { name = "arize" },
     { name = "asgi-lifespan" },
     { name = "asyncpg" },
