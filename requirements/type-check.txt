@@ -32,4 +32,4 @@ types-tabulate
 types-tqdm
 types-ldap3
 types-PyYAML
-arize==8.1.0
+arize>=8.1.0
