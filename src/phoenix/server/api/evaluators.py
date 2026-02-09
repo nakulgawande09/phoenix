@@ -337,62 +337,20 @@ class LLMEvaluator(BaseEvaluator):
                 invocation_parameters.update(denormalized_tool_choice)
                 tool_call_by_id: dict[ToolCallId, ToolCall] = {}
 
-                with tracer_.start_as_current_span(
-                    self._llm_client.model_name,
-                    attributes={
-                        **oi.get_span_kind_attributes("llm"),
-                        **oi.get_llm_model_name_attributes(model_name=self._llm_client.model_name),
-                        **oi.get_llm_input_message_attributes(
-                            [
-                                oi.Message(role=msg["role"].value.lower(), content=msg["content"])
-                                for msg in messages
-                            ]
-                        ),
-                    },
-                ) as llm_span:
-                    try:
-                        async for chunk in self._llm_client.chat_completion_create(
-                            messages=messages,
-                            tools=denormalized_tools,
-                            **invocation_parameters,
-                        ):
-                            if isinstance(chunk, ToolCallChunk):
-                                if chunk.id not in tool_call_by_id:
-                                    tool_call_by_id[chunk.id] = ToolCall(
-                                        name=chunk.function.name,
-                                        arguments=chunk.function.arguments,
-                                    )
-                                else:
-                                    tool_call_by_id[chunk.id]["arguments"] += (
-                                        chunk.function.arguments
-                                    )
-
-                        oi_tool_calls = [
-                            oi.ToolCall(
-                                id=call_id,
-                                function=oi.ToolCallFunction(
-                                    name=call["name"],
-                                    arguments=call["arguments"],
-                                ),
+                async for chunk in self._llm_client.chat_completion_create(
+                    messages=messages,
+                    tools=denormalized_tools,
+                    tracer=tracer_,
+                    **invocation_parameters,
+                ):
+                    if isinstance(chunk, ToolCallChunk):
+                        if chunk.id not in tool_call_by_id:
+                            tool_call_by_id[chunk.id] = ToolCall(
+                                name=chunk.function.name,
+                                arguments=chunk.function.arguments,
                             )
-                            for call_id, call in tool_call_by_id.items()
-                        ]
-                        output_messages: list[oi.Message] = [
-                            oi.Message(
-                                role="assistant",
-                                tool_calls=oi_tool_calls,
-                            )
-                        ]
-                        llm_span.set_attributes(
-                            oi.get_output_attributes({"messages": output_messages})
-                        )
-                        if oi_tool_calls:
-                            llm_span.set_attributes(
-                                oi.get_llm_output_message_attributes(output_messages)
-                            )
-                        llm_span.set_status(Status(StatusCode.OK))
-                    finally:
-                        llm_span.set_attributes(self._llm_client.attributes)
+                        else:
+                            tool_call_by_id[chunk.id]["arguments"] += chunk.function.arguments
 
                 with tracer_.start_as_current_span(
                     "Parse Eval Result",

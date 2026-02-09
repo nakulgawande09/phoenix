@@ -8,6 +8,7 @@ from openinference.semconv.trace import (
     OpenInferenceMimeTypeValues,
     OpenInferenceSpanKindValues,
     SpanAttributes,
+    ToolAttributes,
     ToolCallAttributes,
 )
 from opentelemetry.semconv.attributes.url_attributes import URL_FULL, URL_PATH
@@ -1976,7 +1977,7 @@ class TestChatCompletionOverDatasetSubscription:
             assert not attributes
 
             # llm span
-            assert llm_llm_span.name == "gpt-4"
+            assert llm_llm_span.name == "ChatCompletion"
             assert llm_llm_span.span_kind == "LLM"
             assert llm_llm_span.status_code == "OK"
             assert not llm_llm_span.status_message
@@ -2047,6 +2048,12 @@ class TestChatCompletionOverDatasetSubscription:
             )
             assert arguments is not None
             assert json.loads(arguments) == {"label": "incorrect"}
+            assert attributes.pop(INPUT_MIME_TYPE) == JSON
+            assert isinstance(attributes.pop(INPUT_VALUE), str)
+            assert isinstance(attributes.pop(LLM_INVOCATION_PARAMETERS), str)
+            tool_json_schema = json.loads(attributes.pop(f"{LLM_TOOLS}.0.{TOOL_JSON_SCHEMA}"))
+            assert tool_json_schema["type"] == "function"
+            assert tool_json_schema["function"]["name"] == "evaluate_correctness"
             assert not attributes
 
             # span costs for evaluator trace
@@ -2455,6 +2462,9 @@ INPUT_MIME_TYPE = SpanAttributes.INPUT_MIME_TYPE
 OUTPUT_VALUE = SpanAttributes.OUTPUT_VALUE
 OUTPUT_MIME_TYPE = SpanAttributes.OUTPUT_MIME_TYPE
 PROMPT_TEMPLATE_VARIABLES = SpanAttributes.LLM_PROMPT_TEMPLATE_VARIABLES
+
+# tool attributes
+TOOL_JSON_SCHEMA = ToolAttributes.TOOL_JSON_SCHEMA
 
 # tool call attributes
 TOOL_CALL_ID = ToolCallAttributes.TOOL_CALL_ID
