@@ -870,6 +870,7 @@ class TestChatCompletionSubscription:
         assert attributes.pop(LLM_SYSTEM) == "anthropic"
         assert attributes.pop(URL_FULL) == "https://api.anthropic.com/v1/messages"
         assert attributes.pop(URL_PATH) == "v1/messages"
+        assert not attributes
 
 
 class TestChatCompletionOverDatasetSubscription:
