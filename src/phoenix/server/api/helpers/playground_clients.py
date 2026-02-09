@@ -310,15 +310,14 @@ class PlaygroundStreamingClient(ABC, Generic[ClientT]):
                 raise
 
     @abstractmethod
-    async def _chat_completion_create(
+    def _chat_completion_create(
         self,
         *,
         messages: list[PlaygroundMessage],
         tools: list[JSONScalarType],
         span: OTelSpan,
         **invocation_parameters: Any,
-    ) -> AsyncIterator[ChatCompletionChunk]:
-        pass
+    ) -> AsyncIterator[ChatCompletionChunk]: ...
 
     @classmethod
     def construct_invocation_parameters(

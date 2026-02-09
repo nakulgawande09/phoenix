@@ -1360,15 +1360,15 @@ def test_inferences_with_arize_schema() -> None:
     from importlib.metadata import version
 
     if int(version("arize").split(".")[0]) >= 8:
-        from arize.ml.types import (
+        from arize.ml.types import (  # type: ignore[import-untyped]
             EmbeddingColumnNames as ArizeEmbeddingColumnNames,
         )
         from arize.ml.types import Schema as ArizeSchema
     else:
-        from arize.utils.types import (  # type: ignore[attr-defined,no-redef]
+        from arize.utils.types import (  # type: ignore[import-untyped]
             EmbeddingColumnNames as ArizeEmbeddingColumnNames,
         )
-        from arize.utils.types import (  # type: ignore[attr-defined,no-redef]
+        from arize.utils.types import (
             Schema as ArizeSchema,
         )
 
@@ -1416,10 +1416,10 @@ def test_inferences_with_arize_schema_typed_columns() -> None:
         from arize.ml.types import Schema as ArizeSchema
         from arize.ml.types import TypedColumns
     else:
-        from arize.utils.types import (  # type: ignore[attr-defined,no-redef]
+        from arize.utils.types import (
             Schema as ArizeSchema,
         )
-        from arize.utils.types import TypedColumns  # type: ignore[attr-defined,no-redef]
+        from arize.utils.types import TypedColumns
 
     input_df = DataFrame(
         {
