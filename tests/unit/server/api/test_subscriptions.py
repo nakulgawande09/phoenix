@@ -361,8 +361,8 @@ class TestChatCompletionSubscription:
         assert (input := span.pop("input")).pop("mimeType") == "json"
         assert (input_value := input.pop("value"))
         assert not input
-        assert "api_key" not in str(input_value)
-        assert "apiKey" not in str(input_value)
+        assert "api_key" not in input_value
+        assert "apiKey" not in input_value
         assert span.pop("output") is None
         assert (events := span.pop("events"))
         assert len(events) == 1
@@ -505,8 +505,8 @@ class TestChatCompletionSubscription:
         assert (input := span.pop("input")).pop("mimeType") == "json"
         assert (input_value := input.pop("value"))
         assert not input
-        assert "api_key" not in str(input_value)
-        assert "apiKey" not in str(input_value)
+        assert "api_key" not in input_value
+        assert "apiKey" not in input_value
         assert (output := span.pop("output")).pop("mimeType") == "json"
         assert output.pop("value")
         assert not output
@@ -661,8 +661,8 @@ class TestChatCompletionSubscription:
         assert (input := span.pop("input")).pop("mimeType") == "json"
         assert (input_value := input.pop("value"))
         assert not input
-        assert "api_key" not in str(input_value)
-        assert "apiKey" not in str(input_value)
+        assert "api_key" not in input_value
+        assert "apiKey" not in input_value
         assert (output := span.pop("output")).pop("mimeType") == "text"
         assert output.pop("value")
         assert not output
@@ -821,8 +821,8 @@ class TestChatCompletionSubscription:
         assert (input := span.pop("input")).pop("mimeType") == "json"
         assert (input_value := input.pop("value"))
         assert not input
-        assert "api_key" not in str(input_value)
-        assert "apiKey" not in str(input_value)
+        assert "api_key" not in input_value
+        assert "apiKey" not in input_value
         assert (output := span.pop("output")).pop("mimeType") == "text"
         assert output.pop("value")
         assert not output
@@ -1143,8 +1143,8 @@ class TestChatCompletionOverDatasetSubscription:
         assert (input := span.pop("input")).pop("mimeType") == "json"
         assert (input_value := input.pop("value"))
         assert not input
-        assert "api_key" not in str(input_value)
-        assert "apiKey" not in str(input_value)
+        assert "api_key" not in input_value
+        assert "apiKey" not in input_value
         assert (output := span.pop("output")).pop("mimeType") == "text"
         assert output.pop("value")
         assert not output
