@@ -30,6 +30,8 @@ from typing import (
 import sqlalchemy as sa
 import wrapt
 from openinference.instrumentation import (
+    get_input_attributes,
+    get_output_attributes,
     safe_json_dumps,
 )
 from openinference.semconv.trace import (
@@ -402,6 +404,17 @@ class OpenAIBaseStreamingClient(PlaygroundStreamingClient["AsyncOpenAI"]):
                 llm_tools(tools),
                 llm_input_messages(messages),
                 llm_invocation_parameters(invocation_parameters),
+                get_input_attributes(
+                    jsonify(
+                        {
+                            "messages": messages,
+                            "tools": tools,
+                            "invocation_parameters": _filter_invocation_parameters(
+                                invocation_parameters
+                            ),
+                        }
+                    )
+                ).items(),
             )
         )
         # Convert standard messages to OpenAI messages
@@ -475,6 +488,8 @@ class OpenAIBaseStreamingClient(PlaygroundStreamingClient["AsyncOpenAI"]):
 
                 if text_chunks or tool_call_chunks:
                     span.set_attributes(dict(_llm_output_messages(text_chunks, tool_call_chunks)))
+                    if output_attrs := _output_attributes(text_chunks, tool_call_chunks):
+                        span.set_attributes(output_attrs)
 
     def to_openai_chat_completion_param(
         self,
@@ -2503,11 +2518,35 @@ def llm_model_name(model_name: str) -> Iterator[tuple[str, Any]]:
     yield LLM_MODEL_NAME, model_name
 
 
+def _filter_invocation_parameters(
+    invocation_parameters: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Filter out sensitive keys (api_key, apiKey, credentials) from invocation parameters."""
+    disallowed_keys = {"api_key", "apikey", "credentials"}
+    result: dict[str, Any] = {}
+    for k, v in invocation_parameters.items():
+        key_lower = str(k).lower()
+        if key_lower in disallowed_keys:
+            continue
+        if isinstance(v, dict):
+            result[k] = _filter_invocation_parameters(v)
+        elif isinstance(v, list):
+            result[k] = [
+                _filter_invocation_parameters(item) if isinstance(item, dict) else item
+                for item in v
+            ]
+        else:
+            result[k] = v
+    return result
+
+
 def llm_invocation_parameters(
     invocation_parameters: Mapping[str, Any],
 ) -> Iterator[tuple[str, Any]]:
     if invocation_parameters:
-        yield LLM_INVOCATION_PARAMETERS, safe_json_dumps(invocation_parameters)
+        filtered = _filter_invocation_parameters(invocation_parameters)
+        if filtered:
+            yield LLM_INVOCATION_PARAMETERS, safe_json_dumps(filtered)
 
 
 def llm_tools(tools: list[JSONScalarType]) -> Iterator[tuple[str, Any]]:
@@ -2561,6 +2600,45 @@ def llm_input_messages(
                             f"{LLM_INPUT_MESSAGES}.{i}.{MESSAGE_TOOL_CALLS}.{tool_call_index}.{TOOL_CALL_ID}",
                             tool_call_id,
                         )
+
+
+def _merge_tool_call_chunks_for_output(
+    tool_call_chunks: defaultdict[ToolCallID, list[ToolCallChunk]],
+) -> list[dict[str, Any]]:
+    merged = []
+    for tool_id, chunks in tool_call_chunks.items():
+        if not chunks:
+            continue
+        first = chunks[0]
+        if not first or not hasattr(first, "function"):
+            continue
+        arguments = "".join(c.function.arguments for c in chunks if c and hasattr(c, "function"))
+        merged.append(
+            {
+                "id": tool_id,
+                "function": {
+                    "name": first.function.name or "",
+                    "arguments": arguments or "{}",
+                },
+            }
+        )
+    return merged
+
+
+def _output_attributes(
+    text_chunks: list[TextChunk],
+    tool_call_chunks: defaultdict[ToolCallID, list[ToolCallChunk]],
+) -> dict[str, Any]:
+    """Return output span attributes via openinference-instrumentation."""
+    content = "".join(chunk.content for chunk in text_chunks)
+    merged_tool_calls = _merge_tool_call_chunks_for_output(tool_call_chunks)
+    if content and merged_tool_calls:
+        return get_output_attributes({"content": content, "tool_calls": jsonify(merged_tool_calls)})
+    if merged_tool_calls:
+        return get_output_attributes(jsonify(merged_tool_calls))
+    if content:
+        return get_output_attributes(content)
+    return {}
 
 
 def _llm_output_messages(

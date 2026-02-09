@@ -226,9 +226,14 @@ class TestChatCompletionSubscription:
         assert token_count_prompt > 0
         assert token_count_completion > 0
         assert token_count_total == token_count_prompt + token_count_completion
-        # Input/output are no longer set by the new Tracer implementation
-        _ = span.pop("input")
-        _ = span.pop("output")
+        assert (input := span.pop("input")).pop("mimeType") == "json"
+        assert (input_value := input.pop("value"))
+        assert not input
+        assert "api_key" not in str(input_value)
+        assert "apiKey" not in str(input_value)
+        assert (output := span.pop("output")).pop("mimeType") == "text"
+        assert output.pop("value")
+        assert not output
         assert not span.pop("events")
         assert isinstance(
             cumulative_token_count_total := span.pop("cumulativeTokenCountTotal"), float
@@ -253,7 +258,10 @@ class TestChatCompletionSubscription:
         assert attributes.pop(LLM_TOKEN_COUNT_COMPLETION) == token_count_completion
         assert attributes.pop(LLM_TOKEN_COUNT_PROMPT_DETAILS_CACHE_READ) == 0
         assert attributes.pop(LLM_TOKEN_COUNT_COMPLETION_DETAILS_REASONING) == 0
-        # Input/output values are no longer set by the new Tracer implementation
+        assert attributes.pop(INPUT_VALUE)
+        assert attributes.pop(INPUT_MIME_TYPE) == JSON
+        assert attributes.pop(OUTPUT_VALUE)
+        assert attributes.pop(OUTPUT_MIME_TYPE) == TEXT
         assert attributes.pop(LLM_INPUT_MESSAGES) == [
             {
                 "message": {
@@ -353,9 +361,12 @@ class TestChatCompletionSubscription:
         assert span.pop("tokenCountTotal") == 0
         assert span.pop("tokenCountPrompt") is None
         assert span.pop("tokenCountCompletion") is None
-        # Input/output are no longer set by the new Tracer implementation
-        _ = span.pop("input")
-        _ = span.pop("output")
+        assert (input := span.pop("input")).pop("mimeType") == "json"
+        assert (input_value := input.pop("value"))
+        assert not input
+        assert "api_key" not in str(input_value)
+        assert "apiKey" not in str(input_value)
+        assert span.pop("output") is None
         assert (events := span.pop("events"))
         assert len(events) == 1
         assert (event := events[0])
@@ -384,7 +395,8 @@ class TestChatCompletionSubscription:
         assert attributes.pop(OPENINFERENCE_SPAN_KIND) == LLM
         assert attributes.pop(LLM_MODEL_NAME) == "gpt-4"
         assert attributes.pop(LLM_INVOCATION_PARAMETERS) == json.dumps({"temperature": 0.1})
-        # Input/output values are no longer set by the new Tracer implementation
+        assert attributes.pop(INPUT_VALUE)
+        assert attributes.pop(INPUT_MIME_TYPE) == JSON
         assert attributes.pop(LLM_INPUT_MESSAGES) == [
             {
                 "message": {
@@ -496,9 +508,14 @@ class TestChatCompletionSubscription:
         assert token_count_prompt > 0
         assert token_count_completion > 0
         assert token_count_total == token_count_prompt + token_count_completion
-        # Input/output are no longer set by the new Tracer implementation
-        _ = span.pop("input")
-        _ = span.pop("output")
+        assert (input := span.pop("input")).pop("mimeType") == "json"
+        assert (input_value := input.pop("value"))
+        assert not input
+        assert "api_key" not in str(input_value)
+        assert "apiKey" not in str(input_value)
+        assert (output := span.pop("output")).pop("mimeType") == "json"
+        assert output.pop("value")
+        assert not output
         assert not span.pop("events")
         assert isinstance(
             cumulative_token_count_total := span.pop("cumulativeTokenCountTotal"), float
@@ -523,7 +540,10 @@ class TestChatCompletionSubscription:
         assert attributes.pop(LLM_TOKEN_COUNT_COMPLETION) == token_count_completion
         assert attributes.pop(LLM_TOKEN_COUNT_PROMPT_DETAILS_CACHE_READ) == 0
         assert attributes.pop(LLM_TOKEN_COUNT_COMPLETION_DETAILS_REASONING) == 0
-        # Input/output values are no longer set by the new Tracer implementation
+        assert attributes.pop(INPUT_VALUE)
+        assert attributes.pop(INPUT_MIME_TYPE) == JSON
+        assert attributes.pop(OUTPUT_VALUE)
+        assert attributes.pop(OUTPUT_MIME_TYPE) == JSON
         assert attributes.pop(LLM_INPUT_MESSAGES) == [
             {
                 "message": {
@@ -644,9 +664,14 @@ class TestChatCompletionSubscription:
         assert token_count_prompt > 0
         assert token_count_completion > 0
         assert token_count_total == token_count_prompt + token_count_completion
-        # Input/output are no longer set by the new Tracer implementation
-        _ = span.pop("input")
-        _ = span.pop("output")
+        assert (input := span.pop("input")).pop("mimeType") == "json"
+        assert (input_value := input.pop("value"))
+        assert not input
+        assert "api_key" not in str(input_value)
+        assert "apiKey" not in str(input_value)
+        assert (output := span.pop("output")).pop("mimeType") == "text"
+        assert output.pop("value")
+        assert not output
         assert not span.pop("events")
         assert isinstance(
             cumulative_token_count_total := span.pop("cumulativeTokenCountTotal"), float
@@ -670,7 +695,10 @@ class TestChatCompletionSubscription:
         assert attributes.pop(LLM_TOKEN_COUNT_COMPLETION) == token_count_completion
         assert attributes.pop(LLM_TOKEN_COUNT_PROMPT_DETAILS_CACHE_READ) == 0
         assert attributes.pop(LLM_TOKEN_COUNT_COMPLETION_DETAILS_REASONING) == 0
-        # Input/output values are no longer set by the new Tracer implementation
+        assert attributes.pop(INPUT_VALUE)
+        assert attributes.pop(INPUT_MIME_TYPE) == JSON
+        assert attributes.pop(OUTPUT_VALUE)
+        assert attributes.pop(OUTPUT_MIME_TYPE) == TEXT
         assert (llm_input_messages := attributes.pop(LLM_INPUT_MESSAGES))
         assert len(llm_input_messages) == 3
         llm_input_message = llm_input_messages[0]["message"]
@@ -796,9 +824,14 @@ class TestChatCompletionSubscription:
         assert token_count_prompt > 0
         assert token_count_completion > 0
         assert token_count_total == token_count_prompt + token_count_completion
-        # Input/output are no longer set by the new Tracer implementation
-        _ = span.pop("input")
-        _ = span.pop("output")
+        assert (input := span.pop("input")).pop("mimeType") == "json"
+        assert (input_value := input.pop("value"))
+        assert not input
+        assert "api_key" not in str(input_value)
+        assert "apiKey" not in str(input_value)
+        assert (output := span.pop("output")).pop("mimeType") == "text"
+        assert output.pop("value")
+        assert not output
         assert not span.pop("events")
         assert isinstance(
             cumulative_token_count_total := span.pop("cumulativeTokenCountTotal"), float
@@ -1113,9 +1146,14 @@ class TestChatCompletionOverDatasetSubscription:
         assert token_count_prompt > 0
         assert token_count_completion > 0
         assert token_count_total == token_count_prompt + token_count_completion
-        # Input/output are no longer set by the new Tracer implementation
-        _ = span.pop("input")
-        _ = span.pop("output")
+        assert (input := span.pop("input")).pop("mimeType") == "json"
+        assert (input_value := input.pop("value"))
+        assert not input
+        assert "api_key" not in str(input_value)
+        assert "apiKey" not in str(input_value)
+        assert (output := span.pop("output")).pop("mimeType") == "text"
+        assert output.pop("value")
+        assert not output
         assert not span.pop("events")
         assert isinstance(
             cumulative_token_count_total := span.pop("cumulativeTokenCountTotal"), float
@@ -1139,7 +1177,10 @@ class TestChatCompletionOverDatasetSubscription:
         assert attributes.pop(LLM_TOKEN_COUNT_COMPLETION) == token_count_completion
         assert attributes.pop(LLM_TOKEN_COUNT_PROMPT_DETAILS_CACHE_READ) == 0
         assert attributes.pop(LLM_TOKEN_COUNT_COMPLETION_DETAILS_REASONING) == 0
-        # Input/output values are no longer set by the new Tracer implementation
+        assert attributes.pop(INPUT_VALUE)
+        assert attributes.pop(INPUT_MIME_TYPE) == JSON
+        assert attributes.pop(OUTPUT_VALUE)
+        assert attributes.pop(OUTPUT_MIME_TYPE) == TEXT
         assert attributes.pop(LLM_INPUT_MESSAGES) == [
             {
                 "message": {
@@ -1193,9 +1234,14 @@ class TestChatCompletionOverDatasetSubscription:
         assert token_count_prompt > 0
         assert token_count_completion > 0
         assert token_count_total == token_count_prompt + token_count_completion
-        # Input/output are no longer set by the new Tracer implementation
-        _ = span.pop("input")
-        _ = span.pop("output")
+        assert (input := span.pop("input")).pop("mimeType") == "json"
+        assert (input_value := input.pop("value"))
+        assert not input
+        assert "api_key" not in str(input_value)
+        assert "apiKey" not in str(input_value)
+        assert (output := span.pop("output")).pop("mimeType") == "text"
+        assert output.pop("value")
+        assert not output
         assert not span.pop("events")
         assert isinstance(
             cumulative_token_count_total := span.pop("cumulativeTokenCountTotal"), float
@@ -1219,7 +1265,10 @@ class TestChatCompletionOverDatasetSubscription:
         assert attributes.pop(LLM_TOKEN_COUNT_COMPLETION) == token_count_completion
         assert attributes.pop(LLM_TOKEN_COUNT_PROMPT_DETAILS_CACHE_READ) == 0
         assert attributes.pop(LLM_TOKEN_COUNT_COMPLETION_DETAILS_REASONING) == 0
-        # Input/output values are no longer set by the new Tracer implementation
+        assert attributes.pop(INPUT_VALUE)
+        assert attributes.pop(INPUT_MIME_TYPE) == JSON
+        assert attributes.pop(OUTPUT_VALUE)
+        assert attributes.pop(OUTPUT_MIME_TYPE) == TEXT
         assert attributes.pop(LLM_INPUT_MESSAGES) == [
             {
                 "message": {

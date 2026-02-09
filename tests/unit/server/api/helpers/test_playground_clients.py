@@ -18,7 +18,9 @@ from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanE
 from opentelemetry.trace import Tracer
 
 from phoenix.server.api.helpers.message_helpers import PlaygroundMessage, create_playground_message
-from phoenix.server.api.helpers.playground_clients import OpenAIBaseStreamingClient
+from phoenix.server.api.helpers.playground_clients import (
+    OpenAIBaseStreamingClient,
+)
 from phoenix.server.api.types.ChatCompletionMessageRole import ChatCompletionMessageRole
 from phoenix.server.api.types.ChatCompletionSubscriptionPayload import TextChunk
 from tests.unit.vcr import CustomVCR
@@ -146,6 +148,11 @@ class TestOpenAIBaseStreamingClient:
 
         llm_system = attributes.pop(LLM_SYSTEM)
         assert llm_system == "openai"
+
+        assert attributes.pop(INPUT_VALUE)
+        assert attributes.pop(INPUT_MIME_TYPE) == JSON
+        assert attributes.pop(OUTPUT_VALUE)
+        assert attributes.pop(OUTPUT_MIME_TYPE) == TEXT
 
         assert not attributes
 
@@ -282,6 +289,11 @@ class TestOpenAIBaseStreamingClient:
 
         llm_tool_schema = attributes.pop(f"{LLM_TOOLS}.0.{TOOL_JSON_SCHEMA}")
         assert llm_tool_schema == json.dumps(get_current_weather_tool_schema)
+
+        assert attributes.pop(INPUT_VALUE)
+        assert attributes.pop(INPUT_MIME_TYPE) == JSON
+        assert attributes.pop(OUTPUT_VALUE)
+        assert attributes.pop(OUTPUT_MIME_TYPE) == JSON
 
         assert not attributes
 
