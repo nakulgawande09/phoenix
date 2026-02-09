@@ -193,11 +193,22 @@ def _get_generic_io_value(
     return {}
 
 
+def _deserialize_json_if_possible(value: Any) -> Any:
+    if isinstance(value, str):
+        try:
+            return json.loads(value)
+        except json.JSONDecodeError:
+            return value
+    return value
+
+
 def _get_message(message: Mapping[str, Any]) -> dict[str, Any]:
     content = get_attribute_value(message, MESSAGE_CONTENT)
     name = get_attribute_value(message, MESSAGE_NAME)
     function_call_name = get_attribute_value(message, MESSAGE_FUNCTION_CALL_NAME)
-    function_call_arguments = get_attribute_value(message, MESSAGE_FUNCTION_CALL_ARGUMENTS_JSON)
+    function_call_arguments = _deserialize_json_if_possible(
+        get_attribute_value(message, MESSAGE_FUNCTION_CALL_ARGUMENTS_JSON)
+    )
     function_call = (
         {"name": function_call_name, "arguments": function_call_arguments}
         if function_call_name is not None or function_call_arguments is not None
@@ -207,7 +218,9 @@ def _get_message(message: Mapping[str, Any]) -> dict[str, Any]:
         {
             "function": {
                 "name": get_attribute_value(tool_call, TOOL_CALL_FUNCTION_NAME),
-                "arguments": get_attribute_value(tool_call, TOOL_CALL_FUNCTION_ARGUMENTS_JSON),
+                "arguments": _deserialize_json_if_possible(
+                    get_attribute_value(tool_call, TOOL_CALL_FUNCTION_ARGUMENTS_JSON)
+                ),
             }
         }
         for tool_call in get_attribute_value(message, MESSAGE_TOOL_CALLS) or ()
