@@ -169,17 +169,67 @@ def aio_postgresql_engine(
     log_migrations_to_stdout: bool = True,
 ) -> AsyncEngine:
     from phoenix.config import (
+        get_env_postgres_azure_ad_token_lifetime,
         get_env_postgres_iam_token_lifetime,
+        get_env_postgres_use_azure_ad_auth,
         get_env_postgres_use_iam_auth,
     )
 
     use_iam_auth = get_env_postgres_use_iam_auth()
+    use_azure_ad_auth = get_env_postgres_use_azure_ad_auth()
 
-    asyncpg_url, asyncpg_args = get_pg_config(url, "asyncpg", enforce_ssl=use_iam_auth)
+    # Check mutual exclusivity of IAM auth methods
+    if use_iam_auth and use_azure_ad_auth:
+        raise ValueError(
+            "Cannot enable both AWS RDS IAM authentication and Azure AD authentication. "
+            "Set only one of PHOENIX_POSTGRES_USE_AWS_IAM_AUTH or "
+            "PHOENIX_POSTGRES_USE_AZURE_AD_AUTH."
+        )
+
+    # SSL is required for both AWS IAM and Azure AD authentication
+    enforce_ssl = use_iam_auth or use_azure_ad_auth
+
+    asyncpg_url, asyncpg_args = get_pg_config(url, "asyncpg", enforce_ssl=enforce_ssl)
 
     iam_config: Optional[dict[str, Any]] = None
     token_lifetime: int = 0
-    if use_iam_auth:
+
+    if use_azure_ad_auth:
+        # Azure AD authentication path
+        iam_config = _extract_iam_config_from_url(url)
+        token_lifetime = get_env_postgres_azure_ad_token_lifetime()
+
+        async def azure_ad_async_creator() -> Any:
+            import asyncpg  # type: ignore
+
+            from phoenix.db.azure_auth import get_azure_postgres_token_provider
+
+            assert iam_config is not None
+            provider = get_azure_postgres_token_provider()
+            token = await provider.get_token_async()
+
+            conn_kwargs = {
+                "host": iam_config["host"],
+                "port": iam_config["port"],
+                "user": iam_config["user"],
+                "password": token,
+                "database": iam_config["database"],
+            }
+
+            if asyncpg_args:
+                conn_kwargs.update(asyncpg_args)
+
+            return await asyncpg.connect(**conn_kwargs)
+
+        engine = create_async_engine(
+            url=asyncpg_url,
+            async_creator=azure_ad_async_creator,
+            echo=log_to_stdout,
+            json_serializer=_dumps,
+            pool_recycle=token_lifetime,
+        )
+    elif use_iam_auth:
+        # AWS RDS IAM authentication path
         iam_config = _extract_iam_config_from_url(url)
         token_lifetime = get_env_postgres_iam_token_lifetime()
 
@@ -216,6 +266,7 @@ def aio_postgresql_engine(
             pool_recycle=token_lifetime,
         )
     else:
+        # Standard password authentication path
         engine = create_async_engine(
             url=asyncpg_url,
             connect_args=asyncpg_args,
@@ -226,9 +277,41 @@ def aio_postgresql_engine(
     if not migrate:
         return engine
 
-    psycopg_url, psycopg_args = get_pg_config(url, "psycopg", enforce_ssl=use_iam_auth)
+    psycopg_url, psycopg_args = get_pg_config(url, "psycopg", enforce_ssl=enforce_ssl)
 
-    if use_iam_auth:
+    if use_azure_ad_auth:
+        # Azure AD authentication for migrations
+        assert iam_config is not None
+
+        def azure_ad_sync_creator() -> Any:
+            import psycopg
+
+            from phoenix.db.azure_auth import generate_azure_postgres_token
+
+            token = generate_azure_postgres_token()
+
+            conn_kwargs = {
+                "host": iam_config["host"],
+                "port": iam_config["port"],
+                "user": iam_config["user"],
+                "password": token,
+                "dbname": iam_config["database"],
+            }
+
+            if psycopg_args:
+                conn_kwargs.update(psycopg_args)
+
+            return psycopg.connect(**conn_kwargs)
+
+        sync_engine = sqlalchemy.create_engine(
+            url=psycopg_url,
+            creator=azure_ad_sync_creator,
+            echo=log_migrations_to_stdout,
+            json_serializer=_dumps,
+            pool_recycle=token_lifetime,
+        )
+    elif use_iam_auth:
+        # AWS RDS IAM authentication for migrations
         assert iam_config is not None
 
         def iam_sync_creator() -> Any:
@@ -263,6 +346,7 @@ def aio_postgresql_engine(
             pool_recycle=token_lifetime,
         )
     else:
+        # Standard password authentication for migrations
         sync_engine = sqlalchemy.create_engine(
             url=psycopg_url,
             connect_args=psycopg_args,

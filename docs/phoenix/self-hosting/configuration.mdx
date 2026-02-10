@@ -65,6 +65,12 @@ The following environment variables will control how your phoenix server runs.
 
 * **PHOENIX\_SQL\_DATABASE\_SCHEMA:** An optional string specifying the PostgreSQL [schema](https://www.postgresql.org/docs/current/ddl-schemas.html) for the database tables. Similar to folders, schemas help organize tables outside the default `public` schema. If the specified schema does not exist, it will be created. This option is ignored when using SQLite.
 
+* **PHOENIX\_POSTGRES\_USE\_AWS\_IAM\_AUTH:** Enable AWS RDS IAM database authentication. When enabled, Phoenix uses AWS IAM credentials to generate short-lived tokens instead of static passwords. See [Using Amazon Aurora](/docs/phoenix/self-hosting/configuration/using-amazon-aurora) for details.
+
+* **PHOENIX\_POSTGRES\_USE\_AZURE\_AD\_AUTH:** Enable Azure AD (Microsoft Entra ID) authentication for Azure Database for PostgreSQL. When enabled, Phoenix uses Azure credentials to obtain JWT tokens for database authentication. See [Using Azure Database](/docs/phoenix/self-hosting/configuration/using-azure-database) for details.
+
+* **PHOENIX\_AZURE\_CLIENT\_ID:** Client ID for user-assigned managed identity when using Azure AD authentication. Only needed for user-assigned managed identity; system-assigned managed identity and service principals are auto-detected.
+
 * **PHOENIX\_DEFAULT\_RETENTION\_POLICY\_DAYS:** Sets the default retention policy for traces in days. Defaults to 0 (infinite retention). When set to a positive value, traces older than this many days will be automatically removed from the database according to the configured cleanup schedule. This setting affects the default retention policy that applies to all projects unless overridden on a per-project basis through the Phoenix UI. See the [data retention documentation](/docs/phoenix/settings/data-retention) for more details.
 
 * **PHOENIX\_ENABLE\_PROMETHEUS:** Whether to enable Prometheus metrics at port 9090. Defaults to false.

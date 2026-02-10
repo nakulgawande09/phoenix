@@ -161,6 +161,42 @@ Token lifetime in seconds for connection pool recycling when using AWS RDS IAM a
 AWS RDS auth tokens are valid for 15 minutes. This should be set slightly lower to ensure
 tokens are refreshed before expiration. Defaults to 840 seconds (14 minutes).
 """
+ENV_PHOENIX_POSTGRES_USE_AZURE_AD_AUTH = "PHOENIX_POSTGRES_USE_AZURE_AD_AUTH"
+"""
+Enable Azure AD (Microsoft Entra ID) authentication for Azure Database for PostgreSQL.
+When enabled, Phoenix will use DefaultAzureCredential to obtain JWT tokens for database
+authentication instead of using a static password.
+
+This requires:
+- azure-identity to be installed: pip install 'arize-phoenix[container]'
+- Azure credentials configured via one of:
+  - Environment variables (AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET)
+  - User-assigned managed identity (set PHOENIX_AZURE_CLIENT_ID or AZURE_CLIENT_ID)
+  - System-assigned managed identity (auto-detected on Azure VMs/containers)
+  - Azure CLI (az login)
+- The database user to be configured for Azure AD authentication
+- SSL to be enabled (required by Azure AD auth)
+
+When enabled, PHOENIX_POSTGRES_PASSWORD should NOT be set.
+Mutually exclusive with PHOENIX_POSTGRES_USE_AWS_IAM_AUTH.
+"""
+ENV_PHOENIX_POSTGRES_AZURE_AD_TOKEN_LIFETIME_SECONDS = (
+    "PHOENIX_POSTGRES_AZURE_AD_TOKEN_LIFETIME_SECONDS"
+)
+"""
+Token lifetime in seconds for connection pool recycling when using Azure AD authentication.
+Azure AD tokens are typically valid for 60 minutes. This should be set slightly lower to ensure
+tokens are refreshed before expiration. Defaults to 3000 seconds (50 minutes).
+"""
+ENV_PHOENIX_AZURE_CLIENT_ID = "PHOENIX_AZURE_CLIENT_ID"
+"""
+Client ID for user-assigned managed identity when using Azure AD authentication.
+This is passed to DefaultAzureCredential's managed_identity_client_id parameter.
+
+Only needed when using user-assigned managed identity. For system-assigned managed identity
+or service principal authentication, this is not required (credentials are auto-detected
+or read from AZURE_CLIENT_ID).
+"""
 ENV_PHOENIX_SQL_DATABASE_SCHEMA = "PHOENIX_SQL_DATABASE_SCHEMA"
 """
 The schema to use for the PostgresSQL database. (This is ignored for SQLite.)
@@ -2542,9 +2578,18 @@ def get_env_postgres_connection_str() -> Optional[str]:
     pg_user = getenv(ENV_PHOENIX_POSTGRES_USER)
     pg_password = getenv(ENV_PHOENIX_POSTGRES_PASSWORD)
     use_iam_auth = _bool_val(ENV_PHOENIX_POSTGRES_USE_AWS_IAM_AUTH, False)
+    use_azure_ad_auth = _bool_val(ENV_PHOENIX_POSTGRES_USE_AZURE_AD_AUTH, False)
 
     if not (pg_host and pg_user):
         return None
+
+    # Check mutual exclusivity of IAM auth methods
+    if use_iam_auth and use_azure_ad_auth:
+        raise ValueError(
+            "Cannot enable both AWS RDS IAM authentication and Azure AD authentication. "
+            f"Set only one of {ENV_PHOENIX_POSTGRES_USE_AWS_IAM_AUTH} or "
+            f"{ENV_PHOENIX_POSTGRES_USE_AZURE_AD_AUTH}."
+        )
 
     if use_iam_auth:
         if pg_password:
@@ -2553,6 +2598,15 @@ def get_env_postgres_connection_str() -> Optional[str]:
                 "ignored when using AWS RDS IAM authentication "
                 f"({ENV_PHOENIX_POSTGRES_USE_AWS_IAM_AUTH}=true). Authentication tokens will be "
                 "generated using AWS credentials."
+            )
+        connection_str = f"postgresql://{quote(pg_user)}@{pg_host}"
+    elif use_azure_ad_auth:
+        if pg_password:
+            raise ValueError(
+                f"The environment variable {ENV_PHOENIX_POSTGRES_PASSWORD} is set but will be "
+                "ignored when using Azure AD authentication "
+                f"({ENV_PHOENIX_POSTGRES_USE_AZURE_AD_AUTH}=true). Authentication tokens will be "
+                "generated using Azure AD credentials."
             )
         connection_str = f"postgresql://{quote(pg_user)}@{pg_host}"
     else:
@@ -3290,4 +3344,112 @@ def _validate_iam_auth_config() -> None:
             f"Failed to validate AWS credentials for RDS IAM authentication: {e}. "
             "Ensure AWS credentials are configured via environment variables, "
             "~/.aws/credentials, or IAM role."
+        )
+
+
+def get_env_postgres_use_azure_ad_auth() -> bool:
+    """
+    Gets whether Azure AD authentication is enabled for PostgreSQL connections.
+
+    Returns:
+        bool: True if Azure AD authentication should be used, False otherwise (default)
+    """
+    return _bool_val(ENV_PHOENIX_POSTGRES_USE_AZURE_AD_AUTH, False)
+
+
+def get_env_postgres_azure_ad_token_lifetime() -> int:
+    """
+    Gets the token lifetime in seconds for Azure AD authentication pool recycling.
+
+    Azure AD tokens are typically valid for 60 minutes. This value should be
+    set slightly lower to ensure connections are recycled before token expiration.
+
+    Returns:
+        int: Token lifetime in seconds (default: 3000 = 50 minutes)
+    """
+    lifetime = _int_val(ENV_PHOENIX_POSTGRES_AZURE_AD_TOKEN_LIFETIME_SECONDS, 3000)
+    if lifetime <= 0:
+        raise ValueError(
+            f"{ENV_PHOENIX_POSTGRES_AZURE_AD_TOKEN_LIFETIME_SECONDS} must be a positive integer. "
+            f"Got: {lifetime}"
+        )
+    if lifetime > 3600:
+        logger.warning(
+            f"{ENV_PHOENIX_POSTGRES_AZURE_AD_TOKEN_LIFETIME_SECONDS} is set to {lifetime} seconds, "
+            f"which exceeds typical Azure AD token validity (3600 seconds / 60 minutes). "
+            f"Consider setting it to 3000 seconds (50 minutes) or less."
+        )
+    return lifetime
+
+
+def get_env_azure_client_id() -> Optional[str]:
+    """
+    Gets the Azure client ID for user-assigned managed identity.
+
+    This is used with DefaultAzureCredential's managed_identity_client_id parameter
+    when connecting to Azure Database for PostgreSQL with user-assigned managed identity.
+
+    Returns:
+        Optional[str]: The client ID if set, None otherwise
+    """
+    return getenv(ENV_PHOENIX_AZURE_CLIENT_ID)
+
+
+def _validate_azure_ad_auth_config() -> None:
+    """
+    Validate Azure AD authentication configuration if enabled.
+
+    Raises:
+        ImportError: If azure-identity is not installed when Azure AD auth is enabled
+        ValueError: If configuration is invalid or conflicts with AWS IAM auth
+    """
+    if not get_env_postgres_use_azure_ad_auth():
+        return
+
+    # Check mutual exclusivity with AWS IAM auth
+    if get_env_postgres_use_iam_auth():
+        raise ValueError(
+            "Cannot enable both AWS RDS IAM authentication and Azure AD authentication. "
+            f"Set only one of {ENV_PHOENIX_POSTGRES_USE_AWS_IAM_AUTH} or "
+            f"{ENV_PHOENIX_POSTGRES_USE_AZURE_AD_AUTH}."
+        )
+
+    pg_host = getenv(ENV_PHOENIX_POSTGRES_HOST)
+    if not pg_host:
+        return
+
+    try:
+        from azure.identity import DefaultAzureCredential  # noqa: F401
+    except ImportError:
+        raise ImportError(
+            f"azure-identity is required when {ENV_PHOENIX_POSTGRES_USE_AZURE_AD_AUTH} is enabled. "
+            "Install it with: pip install 'arize-phoenix[container]'"
+        )
+
+    if not getenv(ENV_PHOENIX_POSTGRES_USER):
+        raise ValueError(
+            f"{ENV_PHOENIX_POSTGRES_USER} must be set when using Azure AD authentication"
+        )
+
+    # Validate Azure credentials by attempting to get a token
+    try:
+        from azure.identity import DefaultAzureCredential
+
+        client_id = get_env_azure_client_id()
+        if client_id:
+            credential = DefaultAzureCredential(managed_identity_client_id=client_id)
+        else:
+            credential = DefaultAzureCredential()
+
+        # Try to get a token to validate credentials work
+        scope = "https://ossrdbms-aad.database.windows.net/.default"
+        token = credential.get_token(scope)
+        if token:
+            logger.info("✓ Azure AD credentials validated for PostgreSQL authentication")
+    except Exception as e:
+        raise ValueError(
+            f"Failed to validate Azure credentials for database authentication: {e}. "
+            "Ensure Azure credentials are configured via environment variables "
+            "(AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET), "
+            "managed identity, or Azure CLI."
         )

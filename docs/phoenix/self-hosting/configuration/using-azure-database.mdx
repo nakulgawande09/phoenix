@@ -1,0 +1,172 @@
+---
+title: "Using Azure Database for PostgreSQL"
+description: "Phoenix supports Azure AD (Microsoft Entra ID) authentication for PostgreSQL connections to Azure Database for PostgreSQL."
+---
+
+Phoenix supports Azure AD authentication using `DefaultAzureCredential` from the `azure-identity` package. This allows you to connect to Azure Database for PostgreSQL without storing database passwords, using managed identities or service principals.
+
+## Prerequisites
+
+1. **Azure Database for PostgreSQL** configured for Azure AD authentication
+2. **Azure identity configured** via one of:
+   - System-assigned managed identity (Azure VMs, App Service, AKS)
+   - User-assigned managed identity
+   - Service principal with client secret/certificate
+   - Azure CLI (`az login`)
+
+3. **Install the azure-identity package**:
+   ```bash
+   pip install 'arize-phoenix[container]'
+   ```
+
+## Authentication Methods
+
+### Option A: System-Assigned Managed Identity
+
+When running on Azure (VM, App Service, Container Apps, AKS), Phoenix automatically uses the system-assigned managed identity. No additional configuration is needed.
+
+```bash
+# Enable Azure AD authentication
+export PHOENIX_POSTGRES_USE_AZURE_AD_AUTH=true
+
+# Database connection
+export PHOENIX_POSTGRES_HOST=mydb.postgres.database.azure.com
+export PHOENIX_POSTGRES_USER=phoenix-app@mydb  # Azure AD user/identity name
+export PHOENIX_POSTGRES_DB=phoenix
+```
+
+### Option B: User-Assigned Managed Identity
+
+For user-assigned managed identity, specify the client ID:
+
+```bash
+# Enable Azure AD authentication
+export PHOENIX_POSTGRES_USE_AZURE_AD_AUTH=true
+
+# Specify the managed identity client ID
+export PHOENIX_AZURE_CLIENT_ID=your-managed-identity-client-id
+
+# Database connection
+export PHOENIX_POSTGRES_HOST=mydb.postgres.database.azure.com
+export PHOENIX_POSTGRES_USER=my-user-identity@mydb
+export PHOENIX_POSTGRES_DB=phoenix
+```
+
+### Option C: Service Principal (Local Development)
+
+For local development or non-Azure environments, use a service principal:
+
+```bash
+# Azure service principal credentials
+export AZURE_TENANT_ID=your-tenant-id
+export AZURE_CLIENT_ID=your-app-client-id
+export AZURE_CLIENT_SECRET=your-client-secret
+
+# Enable Azure AD authentication
+export PHOENIX_POSTGRES_USE_AZURE_AD_AUTH=true
+
+# Database connection
+export PHOENIX_POSTGRES_HOST=mydb.postgres.database.azure.com
+export PHOENIX_POSTGRES_USER=service-principal-name@mydb
+export PHOENIX_POSTGRES_DB=phoenix
+```
+
+Alternatively, you can use certificate-based authentication:
+
+```bash
+export AZURE_TENANT_ID=your-tenant-id
+export AZURE_CLIENT_ID=your-app-client-id
+export AZURE_CLIENT_CERTIFICATE_PATH=/path/to/certificate.pem
+export AZURE_CLIENT_CERTIFICATE_PASSWORD=optional-password  # if certificate is encrypted
+```
+
+### Option D: Azure CLI (Development)
+
+For development, you can use Azure CLI credentials:
+
+```bash
+# Login with Azure CLI first
+az login
+
+# Enable Azure AD authentication
+export PHOENIX_POSTGRES_USE_AZURE_AD_AUTH=true
+
+# Database connection
+export PHOENIX_POSTGRES_HOST=mydb.postgres.database.azure.com
+export PHOENIX_POSTGRES_USER=your-email@domain.com
+export PHOENIX_POSTGRES_DB=phoenix
+```
+
+## Environment Variables Reference
+
+### Phoenix-Specific Variables
+
+| Variable | Type | Default | Description |
+|----------|------|---------|-------------|
+| `PHOENIX_POSTGRES_USE_AZURE_AD_AUTH` | bool | `false` | Enable Azure AD authentication |
+| `PHOENIX_POSTGRES_AZURE_AD_TOKEN_LIFETIME_SECONDS` | int | `3000` | Token lifetime for connection pool recycling (default: 50 minutes) |
+| `PHOENIX_AZURE_CLIENT_ID` | string | - | Optional: Client ID for user-assigned managed identity |
+
+### Azure SDK Variables
+
+These variables are read by `DefaultAzureCredential`:
+
+| Variable | Description |
+|----------|-------------|
+| `AZURE_TENANT_ID` | Microsoft Entra (Azure AD) tenant ID |
+| `AZURE_CLIENT_ID` | Application/client ID of the service principal |
+| `AZURE_CLIENT_SECRET` | Client secret for the service principal |
+| `AZURE_CLIENT_CERTIFICATE_PATH` | Path to PEM/PKCS12 certificate file |
+| `AZURE_CLIENT_CERTIFICATE_PASSWORD` | Password for the certificate file (optional) |
+| `AZURE_AUTHORITY_HOST` | Authority host URL for non-public clouds |
+
+## Token Refresh
+
+Azure AD tokens are typically valid for 60 minutes. Phoenix automatically refreshes tokens before expiry using a background refresh mechanism. The default token lifetime setting (3000 seconds / 50 minutes) ensures tokens are refreshed well before expiration.
+
+To customize the refresh interval:
+
+```bash
+export PHOENIX_POSTGRES_AZURE_AD_TOKEN_LIFETIME_SECONDS=2400  # 40 minutes
+```
+
+## SSL Configuration
+
+SSL is automatically enforced when using Azure AD authentication. Azure Database for PostgreSQL requires SSL for all connections using Azure AD tokens.
+
+## Mutual Exclusivity
+
+Azure AD authentication and AWS RDS IAM authentication are mutually exclusive. You cannot enable both simultaneously:
+
+```bash
+# This will cause an error:
+export PHOENIX_POSTGRES_USE_AZURE_AD_AUTH=true
+export PHOENIX_POSTGRES_USE_AWS_IAM_AUTH=true  # Error!
+```
+
+## Troubleshooting
+
+### Common Issues
+
+1. **"azure-identity is required"**: Install the package with `pip install 'arize-phoenix[container]'`
+
+2. **"Failed to validate Azure credentials"**: Ensure Azure credentials are configured correctly. Check:
+   - For managed identity: Verify the identity is assigned to your Azure resource
+   - For service principal: Verify `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, and `AZURE_CLIENT_SECRET` are set correctly
+   - For Azure CLI: Run `az login` and ensure you're logged in
+
+3. **"SSL cannot be disabled"**: Azure AD authentication requires SSL. Remove any `sslmode=disable` from your connection string.
+
+4. **Authentication failures**: Ensure the database user matches the Azure AD identity name and has appropriate permissions in the PostgreSQL database.
+
+### Verify Azure Credentials
+
+To verify your Azure credentials are working:
+
+```python
+from azure.identity import DefaultAzureCredential
+
+credential = DefaultAzureCredential()
+token = credential.get_token("https://ossrdbms-aad.database.windows.net/.default")
+print(f"Token obtained, expires: {token.expires_on}")
+```
