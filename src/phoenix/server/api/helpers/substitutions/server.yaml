@@ -1,0 +1,25 @@
+# Named mustache snippets for transforming structured tool data
+# These formatters handle output structures (tool definitions and tool calls)
+
+available_tools_list: |-
+  {{#output.available_tools}}
+  {{{.}}}
+  ---
+  {{/output.available_tools}}
+  {{^output.available_tools}}
+  No tools available.
+  {{/output.available_tools}}
+
+tool_calls_to_string: |-
+  {{#output.messages}}
+  Message:
+  {{role}}: {{content}}
+  Tool Calls:
+  {{#tool_calls}}
+  {{{.}}}
+  ---
+  {{/tool_calls}}
+  {{^tool_calls}}
+  No tools called.
+  {{/tool_calls}}
+  {{/output.messages}}

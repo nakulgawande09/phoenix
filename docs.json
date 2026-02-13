@@ -242,6 +242,7 @@
                   "docs/phoenix/datasets-and-experiments/how-to-experiments",
                   "docs/phoenix/datasets-and-experiments/how-to-experiments/run-experiments",
                   "docs/phoenix/datasets-and-experiments/how-to-experiments/using-evaluators",
+                  "docs/phoenix/datasets-and-experiments/how-to-experiments/how-to-dataset-evaluators",
                   "docs/phoenix/datasets-and-experiments/how-to-experiments/repetitions",
                   "docs/phoenix/datasets-and-experiments/how-to-experiments/splits"
                 ]
@@ -707,6 +708,7 @@
             "icon": "clipboard-check",
             "pages": [
               "docs/phoenix/integrations/evaluation-integrations/cleanlab",
+              "docs/phoenix/integrations/evaluation-integrations/mlflow",
               "docs/phoenix/integrations/evaluation-integrations/ragas",
               "docs/phoenix/integrations/evaluation-integrations/uqlm"
             ]

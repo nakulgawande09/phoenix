@@ -29,6 +29,10 @@ Every prompt instance can be configured to use a specific LLM and set of invocat
   <img src="https://storage.googleapis.com/arize-phoenix-assets/assets/gifs/model_config.gif" />
 </Frame>
 
+<Info>
+For OpenAI and Azure OpenAI models, you can select the **OpenAI API type** in the model configuration panel. Choose **Chat Completions** (`chat.completions.create`) or **Responses** (`responses.create`) depending on the model and feature set you need.
+</Info>
+
 ## Comparing Prompts
 
 The Prompt Playground offers the capability to compare multiple prompt variants directly within the playground. Simply click the **+ Compare** button at the top of the first prompt to create duplicate instances. Each prompt variant manages its own independent template, model, and parameters. This allows you to quickly compare prompts (labeled A, B, C, and D in the UI) and run experiments to determine which prompt and model configuration is optimal for the given task.
@@ -45,6 +49,102 @@ Phoenix lets you run a prompt (or multiple prompts) on a dataset. Simply [load a
   <img src="https://storage.googleapis.com/arize-phoenix-assets/assets/images/phoenix-docs-images/6587d15c-image.jpeg" />
 </Frame>
 
+### Configuring Dataset Paths
+
+By default, the playground reads template variables from `input`, so `{question}` will resolve against `input.question` automatically. If your dataset examples store inputs under a different nested object, you can configure where the playground should read prompt variables from:
+
+1. Load a dataset
+2. Click the **settings button** (gear icon) in the experiment toolbar next to the dataset selector
+3. Set the **Prompt variable path** to the dot-notation path that contains your template variables (e.g., `input` or `payload.inputs`)
+
+When set, Phoenix will resolve template variables against that object. For example, if your prompt uses `{question}` and your dataset example looks like:
+
+```json
+{
+  "input": {
+    "question": "What is the weather in San Francisco?"
+  }
+}
+```
+
+You can leave the default prompt variable path as `input`.
+
+If you want to reference root-level fields directly (for example `{input.question}` and `{output.response}`), clear the prompt variable path so variables resolve from the root object. With this dataset example:
+
+```json
+{
+  "input": {
+    "question": "What is the weather in San Francisco?"
+  },
+  "output": {
+    "response": "I can help with that."
+  }
+}
+```
+
+You can use template variables like `{input.question}` and `{output.response}` in your prompt.
+
+## Appending Conversation History
+
+When running experiments over datasets, you can append conversation messages from your dataset examples to the prompt. This is useful for:
+
+- **A/B testing models**: Compare how different models respond to the same conversation history
+- **Testing system prompts**: Evaluate different system prompts against identical user conversations
+- **Multi-turn conversation experiments**: Run experiments using existing conversation threads
+
+### Setting the Appended Messages Path
+
+To use this feature:
+
+1. Load a dataset that contains conversation messages in OpenAI format
+2. Click the **settings button** (gear icon) in the experiment toolbar next to the dataset selector
+3. Enter the **dot-notation path** to the messages array in your dataset examples (e.g., `messages` or `input.messages`)
+
+When you run the experiment, messages at the specified path will be appended to the **end of your prompt template** after template variables are applied. This makes it easy to keep your system prompt and initial instructions in the template while replaying real conversation history from the dataset.
+
+### Dataset Format
+
+Your dataset examples should contain messages in OpenAI's chat format:
+
+```json
+{
+  "messages": [
+    {"role": "user", "content": "What is the weather in San Francisco?"},
+    {"role": "assistant", "content": "Let me check that for you."},
+    {"role": "user", "content": "Thanks! Also, what about New York?"}
+  ]
+}
+```
+
+The supported message roles are:
+- `user` - User messages
+- `assistant` - Assistant/AI responses
+- `system` - System messages
+- `tool` - Tool response messages (with `tool_call_id`)
+
+For nested structures, use dot-notation paths:
+
+```json
+{
+  "input": {
+    "messages": [
+      {"role": "user", "content": "Hello!"}
+    ]
+  }
+}
+```
+
+In this case, set the path to `input.messages`.
+
+### Example: A/B Testing System Prompts
+
+1. Create a dataset with conversation examples (user messages and expected context)
+2. In the playground, configure two prompt variants (A and B) with different system prompts
+3. Load your dataset and set the appended messages path to `messages`
+4. Run the experiment to compare how each system prompt handles the same conversations
+
+This approach lets you systematically evaluate prompt changes across many real-world conversation scenarios.
+
 ## Playground Traces
 
 All invocations of an LLM via the playground is recorded for analysis, annotations, evaluations, and dataset curation.
@@ -60,4 +160,3 @@ If however you run a prompt over dataset examples, the outputs and spans from yo
 <Frame caption="If you run over a dataset, the output and traces is tracked as a dataset experiment">
   <img src="https://storage.googleapis.com/arize-phoenix-assets/assets/images/phoenix-docs-images/93a48c27-image.jpeg" />
 </Frame>
-

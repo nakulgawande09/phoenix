@@ -94,6 +94,42 @@ register({ projectName: "my-express-app" });
 const app = express();
 ```
 
+## Flushing Spans Before Exit
+
+**CRITICAL:** Spans may not be exported if still queued in the processor when your process exits. Call `provider.shutdown()` to explicitly flush before exit.
+
+**Standard pattern:**
+
+```typescript
+const provider = register({
+  projectName: "my-app",
+  batch: true,
+});
+
+async function main() {
+  await doWork();
+  await provider.shutdown();  // Flush spans before exit
+}
+
+main().catch(async (error) => {
+  console.error(error);
+  await provider.shutdown();  // Flush on error too
+  process.exit(1);
+});
+```
+
+**Alternative:**
+
+```typescript
+// Use batch: false for immediate export (no shutdown needed)
+register({
+  projectName: "my-app",
+  batch: false,
+});
+```
+
+For production patterns including graceful termination, see `production-typescript.md`.
+
 ## Verification
 
 1. Open Phoenix UI: `http://localhost:6006`
@@ -103,10 +139,12 @@ const app = express();
 **Enable diagnostic logging:**
 
 ```typescript
-import { DiagConsoleLogger, DiagLogLevel, diag } from "@opentelemetry/api";
+import { DiagLogLevel, register } from "@arizeai/phoenix-otel";
 
-diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.DEBUG);
-register({ projectName: "my-app" });
+register({
+  projectName: "my-app",
+  diagLogLevel: DiagLogLevel.DEBUG,
+});
 ```
 
 ## Troubleshooting
@@ -115,6 +153,11 @@ register({ projectName: "my-app" });
 - Verify `PHOENIX_COLLECTOR_ENDPOINT` is correct
 - Set `PHOENIX_API_KEY` for Phoenix Cloud
 - For ESM: Ensure `manuallyInstrument()` is called
+- **With `batch: true`:** Call `provider.shutdown()` before exit to flush queued spans (see Flushing Spans section)
+
+**Traces missing:**
+- With `batch: true`: Call `await provider.shutdown()` before process exit to flush queued spans
+- Alternative: Set `batch: false` for immediate export (no shutdown needed)
 
 **Missing attributes:**
 - Check instrumentation is registered (ESM requires manual setup)

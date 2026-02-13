@@ -45,7 +45,7 @@ uv run pytest tests/unit/test_failed_unit_tests.py::test_failed_test  # Runs a p
 uv run pytest tests/integration -n auto                               # Runs integration tests in parallel
 ```
 
-Other commands can be managed through the 
+Other commands can be managed through tox
 
 ```bash
 tox run -e ruff                                          # Format and lint
@@ -62,6 +62,8 @@ tox list                                                 # List all environments
 pnpm dev                                 # Dev server with hot reload
 pnpm run build                           # Build production
 pnpm test                                # Run tests
+pnpm run test:e2e                        # Run Playwright E2E tests (builds first, starts test server)
+pnpm run test:e2e -- tests/foo.spec.ts --project=chromium # Run specific E2E test file
 pnpm run lint:fix                        # Fix linting issues
 pnpm run typecheck                       # Type check
 pnpm run build:relay                     # Build GraphQL schema
@@ -119,6 +121,7 @@ phoenix/
 ## Code Style & Conventions
 
 ### Python Style
+
 - **Line length**: 100 characters
 - **Target version**: Python 3.10
 - **Type checking**: Strict mode with mypy
@@ -128,11 +131,14 @@ phoenix/
 - When creating or updating tests that use `vcrpy` to record requests and responses to and from third-party APIs, DO NOT create or update the cassette YAML file directly via a file edit. Instead, first ensure that the test passes by actually hitting the third-party API. This typically requires (1) deleting the pre-existing cassette YAML file (if one exists) and (2) commenting out fixtures for API keys (e.g., `openai_api_key`) to allow API keys set as environment variables in the the development environment to be used. Once the test passes by hitting the actual third-party API, uncomment any API key fixtures and re-run the test to ensure it still passes using `vcrpy`. A consequence of this approach is that tests using `vcrpy` should avoid hard-coding details that are likely to vary between responses from the API. For example, instead of asserting an exact token count that likely differs for each response, just assert that the token count returned from the API is an integer.
 
 ### TypeScript Style
+
 - **Node version**: 22+
 - **GraphQL**: Uses Relay for data fetching
 - **Linting**: ESLint with TypeScript
+- **Function parameters**: Prefer a single destructured object parameter over multiple positional arguments for functions with two or more parameters (e.g., `function foo({ searchParams, prompts }: { searchParams: URLSearchParams; prompts: Prompt[] })` instead of `function foo(searchParams: URLSearchParams, prompts: Prompt[])`). This improves readability at call sites and makes future parameter additions non-breaking.
 
 ### REST API Conventions
+
 - Resources are nouns (pluralized): `/datasets/:dataset_id` not `/getDataset/:id`
 - Use snake_case for query params and JSON payloads
 - Responses have `data` key, cursor-based pagination
@@ -145,4 +151,8 @@ phoenix/
 
 3. **GraphQL Schema**: After modifying schema in Python, rebuild with `tox run -e build_graphql_schema`.
 
-4. **Changesets**: TypeScript package changes require a changeset via `pnpm changeset`.
+4. **Changesets**: Any change inside `js/` requires a changeset via `pnpm changeset` (including dependency updates, code changes, and config updates).
+
+5. **Lint Fix Required Before Handoff**: After making changes, run the relevant lint command with auto-fix and then re-run validation for touched areas.
+   - `js/`: `pnpm --dir js lint --fix`
+   - `app/`: `pnpm --dir app run lint:fix`

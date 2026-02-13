@@ -1,12 +1,10 @@
 import { expect, test } from "@playwright/test";
 import { randomUUID } from "crypto";
 
+import { login, MEMBER_USER } from "./utils/login";
+
 test.beforeEach(async ({ page }) => {
-  page.goto(`/login`);
-  await page.getByLabel("Email").fill("member@localhost.com");
-  await page.getByLabel("Password").fill("member123");
-  await page.getByRole("button", { name: "Log In", exact: true }).click();
-  await page.waitForURL("**/projects");
+  await login(page, MEMBER_USER);
 });
 
 test("can create user key", async ({ page }) => {
@@ -30,9 +28,7 @@ test("can create user key", async ({ page }) => {
     .click();
 
   // Verify the named key appears in the table - which means key creation succeeded
-  await expect(page.getByRole("cell", { name: keyName })).toBeVisible({
-    timeout: 60000,
-  });
+  await expect(page.getByRole("cell", { name: keyName })).toBeVisible();
 });
 
 test("should be able to create a new project", async ({ page }) => {
